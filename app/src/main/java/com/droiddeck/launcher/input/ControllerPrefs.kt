@@ -163,10 +163,15 @@ object ControllerPrefs {
         prefs(context).edit().putBoolean("screenKeysShown", shown).apply()
     }
 
-    fun screenKeys(context: Context): List<ScreenKey> = decodeScreenKeys(prefs(context).getString("screenKeys", null).orEmpty())
+    fun screenKeys(context: Context, profile: String? = null): List<ScreenKey> {
+        val p = prefs(context)
+        val raw = profile?.let { p.getString("screenKeys.$it", null) } ?: p.getString("screenKeys", null)
+        return decodeScreenKeys(raw.orEmpty())
+    }
 
-    fun setScreenKeys(context: Context, keys: List<ScreenKey>) {
-        prefs(context).edit().putString("screenKeys", encodeScreenKeys(keys)).apply()
+    fun setScreenKeys(context: Context, keys: List<ScreenKey>, profile: String? = null) {
+        val key = profile?.let { "screenKeys.$it" } ?: "screenKeys"
+        prefs(context).edit().putString(key, encodeScreenKeys(keys)).apply()
     }
 
     fun encodeScreenKeys(keys: List<ScreenKey>): String = keys.joinToString(";") {

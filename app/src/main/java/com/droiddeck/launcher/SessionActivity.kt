@@ -164,6 +164,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private lateinit var hud: DroidDeckHudHost
     private lateinit var memoryHud: com.droiddeck.launcher.session.MemoryHud
     private var padBridge: PadBridge? = null
+    private val gamepadTouchInput = com.droiddeck.launcher.input.GamepadTouchInput()
     private val physicalShortcuts = PhysicalShortcutRouter()
     private var joyConVr: com.droiddeck.launcher.input.JoyConVr? = null
     private var handCamera: com.droiddeck.launcher.handtracking.HandCamera? = null
@@ -662,7 +663,13 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             root.addView(controls)
         }
         screenKeysShown = com.droiddeck.launcher.input.ControllerPrefs.screenKeysShown(this)
-        screenKeys = ScreenKeys(this) { code, down -> if (CompositorHost.isStarted) sendGuestKey(code, down) }.also { keys ->
+        val gameProfile = (com.droiddeck.launcher.session.SessionState.gameId
+            ?: com.droiddeck.launcher.session.SessionState.program)?.let { raw ->
+            "game-${raw.lowercase().replace(Regex("[^a-z0-9._-]"), "_").take(80)}"
+        }
+        screenKeys = ScreenKeys(this, { code, down ->
+            if (!gamepadTouchInput.send(code, down, bridge) && CompositorHost.isStarted) sendGuestKey(code, down)
+        }, gameProfile).also { keys ->
             keys.onTouchMiss = miss@{ event ->
                 if (!gestureTouchStreamGate.accepts(GestureTouchStreamGate.Source.SCREEN_KEYS, event)) return@miss
                 event.offsetLocation(keys.left - surfaceView.left.toFloat(), keys.top - surfaceView.top.toFloat())
@@ -670,6 +677,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
             keys.onAdd = { screenKeyPickerOpen = true }
             keys.onSelect = { codes -> screenKeyEdit = screenKeys?.stateOf(codes) }
+            keys.onAnalogStick = { left, x, y -> gamepadTouchInput.setAnalog(left, x, y, bridge) }
             keys.onEditingChanged = { if (!it) screenKeyEdit = null }
             keys.steamStyle = { steamTouchControls?.style }
             keys.visibility = if (screenKeysShown) View.VISIBLE else View.GONE

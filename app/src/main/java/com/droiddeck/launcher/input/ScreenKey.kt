@@ -3,7 +3,7 @@ package com.droiddeck.launcher.input
 import android.content.Context
 
 fun screenKeyLabel(context: Context, codes: List<Int>): String =
-    codes.filter { it != 0 }.joinToString("+") { short(context, it) }
+    codes.filter { it != 0 }.joinToString("+") { GamepadTouchCodes.label(it) ?: short(context, it) }
 
 private fun short(context: Context, code: Int): String = when (code) {
     28 -> "⏎"

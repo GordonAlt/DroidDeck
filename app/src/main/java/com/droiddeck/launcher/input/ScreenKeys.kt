@@ -19,7 +19,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.round
 
-class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) : View(context) {
+class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, private val profile: String? = null) : View(context) {
     private class Entry(val codes: List<Int>) {
         var glyph = ""
         var text = ""
@@ -38,6 +38,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         var cy = 0f
         var halfW = 0f
         var halfH = 0f
+        var stickX = 0f
+        var stickY = 0f
     }
 
     private val entries = mutableListOf<Entry>()
@@ -46,6 +48,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
     private val dpadDown = HashMap<Int, Int>()
     private val stickEntries = HashMap<Int, Entry>()
     private val stickCodes = HashMap<Int, List<Int>>()
+    private val analogSticks = HashMap<Int, Pair<Entry, Boolean>>()
     private val held = HashMap<Int, Int>()
     private var forwardedPointerBits = 0
     private var addX = -1f
@@ -66,7 +69,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
     private var tint = ControllerPrefs.STEAM_BLUE
 
     init {
-        ControllerPrefs.screenKeys(context).forEach { key -> entries += entryOf(key) }
+        ControllerPrefs.screenKeys(context, profile).forEach { key -> entries += entryOf(key) }
     }
 
     var followSteam = false
@@ -80,6 +83,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
 
     var onAdd: (() -> Unit)? = null
     var onSelect: ((List<Int>) -> Unit)? = null
+    var onAnalogStick: ((Boolean, Float, Float) -> Unit)? = null
     var onEditingChanged: ((Boolean) -> Unit)? = null
     var onTouchMiss: ((MotionEvent) -> Unit)? = null
 
@@ -131,7 +135,9 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
             invalidate()
             return
         }
-        val entry = Entry(codes)
+        val entry = Entry(codes).also {
+            if (GamepadTouchCodes.LEFT_ANALOG in codes || GamepadTouchCodes.RIGHT_ANALOG in codes) it.shape = SCREEN_KEY_STICK
+        }
         if (addX >= 0f && width > 0) {
             entry.x = (addX / width).coerceIn(0.05f, 0.95f)
             entry.y = (addY / height).coerceIn(0.05f, 0.95f)
@@ -172,7 +178,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
             it.y = old.y
             it.size = old.size
             it.opacity = old.opacity
-            it.shape = old.shape
+            it.shape = if (GamepadTouchCodes.LEFT_ANALOG in to || GamepadTouchCodes.RIGHT_ANALOG in to) SCREEN_KEY_STICK else old.shape
             it.toggle = old.toggle
             it.labels = old.labels
         }
@@ -335,6 +341,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         stickCodes.values.flatten().forEach { if (it != 0) releaseKey(it) }
         stickCodes.clear()
         stickEntries.clear()
+        analogSticks.values.forEach { (entry, left) -> entry.stickX = 0f; entry.stickY = 0f; onAnalogStick?.invoke(left, 0f, 0f) }
+        analogSticks.clear()
         down.values.forEach { release(it) }
         down.clear()
         latched.toList().forEach { release(it) }
@@ -466,7 +474,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         DPAD_DIRS.forEachIndexed { index, dir ->
             val on = entry.armed == index
             val code = entry.codes.getOrNull(index) ?: 0
-            val name = if (code == 0) "" else screenKeyLabel(context, listOf(code))
+            val analog = GamepadTouchCodes.LEFT_ANALOG in entry.codes || GamepadTouchCodes.RIGHT_ANALOG in entry.codes
+            val name = if (code == 0 || analog) "" else screenKeyLabel(context, listOf(code))
             if (entry.labels && name.isNotEmpty()) {
                 textPaint.color = if (on) Color.WHITE else tinted(color, alpha)
                 textPaint.textSize = dp(48f)
@@ -549,7 +558,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         strokePaint.strokeWidth = if (engaged) hairline * 1.6f else hairline
         strokePaint.color = tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
         canvas.drawCircle(entry.cx, entry.cy, radius - hairline / 2f, strokePaint)
-        val dir = if (engaged) STICK_DIRS[entry.armed.coerceIn(0, 7)] else 0f to 0f
+        val dir = if (entry.stickX != 0f || entry.stickY != 0f) entry.stickX to entry.stickY
+            else if (engaged) STICK_DIRS[entry.armed.coerceIn(0, 7)] else 0f to 0f
         val knob = radius * 0.36f
         fillPaint.color = tinted(color, if (engaged) 0.55f * alpha else 0.24f * alpha)
         canvas.drawCircle(entry.cx + dir.first * radius * 0.40f, entry.cy + dir.second * radius * 0.40f, knob, fillPaint)
@@ -560,7 +570,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         STICK_DIRS.forEachIndexed { index, unit ->
             val on = entry.armed == index
             val code = entry.codes.getOrNull(index) ?: 0
-            val name = if (code == 0) "" else screenKeyLabel(context, listOf(code))
+            val analog = GamepadTouchCodes.LEFT_ANALOG in entry.codes || GamepadTouchCodes.RIGHT_ANALOG in entry.codes
+            val name = if (code == 0 || analog) "" else screenKeyLabel(context, listOf(code))
             if (entry.labels && name.isNotEmpty()) {
                 textPaint.color = if (on) Color.WHITE else tinted(color, 0.85f * alpha)
                 textPaint.textSize = dp(48f)
@@ -836,6 +847,17 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
                     return true
                 }
                 if (entry.shape == SCREEN_KEY_STICK) {
+                    val analogLeft = when {
+                        GamepadTouchCodes.LEFT_ANALOG in entry.codes -> true
+                        GamepadTouchCodes.RIGHT_ANALOG in entry.codes -> false
+                        else -> null
+                    }
+                    if (analogLeft != null) {
+                        val pid = event.getPointerId(index)
+                        analogSticks[pid] = entry to analogLeft
+                        updateAnalogStick(entry, analogLeft, event.getX(index), event.getY(index))
+                        return true
+                    }
                     val sector = stickSector(entry, event.getX(index), event.getY(index))
                     val pid = event.getPointerId(index)
                     stickCodes.remove(pid)?.forEach { if (it != 0) releaseKey(it) }
@@ -864,6 +886,11 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
 
             MotionEvent.ACTION_MOVE -> {
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
+                repeat(event.pointerCount) { index ->
+                    val pid = event.getPointerId(index)
+                    val analog = analogSticks[pid]
+                    if (analog != null) updateAnalogStick(analog.first, analog.second, event.getX(index), event.getY(index))
+                }
                 if (stickEntries.isEmpty()) return true
                 repeat(event.pointerCount) { index ->
                     val pid = event.getPointerId(index)
@@ -892,6 +919,12 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
                     return true
                 }
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
+                analogSticks.remove(pid)?.let { (entry, left) ->
+                    entry.stickX = 0f; entry.stickY = 0f
+                    onAnalogStick?.invoke(left, 0f, 0f)
+                    invalidate()
+                    return true
+                }
                 if (stickCodes.containsKey(pid)) {
                     stickCodes.remove(pid)?.forEach { if (it != 0) releaseKey(it) }
                     stickEntries.remove(pid)?.armed = -1
@@ -916,6 +949,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
                 stickCodes.values.flatten().forEach { if (it != 0) releaseKey(it) }
                 stickCodes.clear()
                 stickEntries.clear()
+                analogSticks.values.forEach { (entry, left) -> entry.stickX = 0f; entry.stickY = 0f; onAnalogStick?.invoke(left, 0f, 0f) }
+                analogSticks.clear()
                 entries.forEach { it.armed = -1 }
                 dpadDown.values.forEach { releaseKey(it) }
                 dpadDown.clear()
@@ -926,6 +961,18 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
             }
         }
         return true
+    }
+
+    private fun updateAnalogStick(entry: Entry, left: Boolean, x: Float, y: Float) {
+        val radius = minOf(entry.halfW, entry.halfH).coerceAtLeast(1f) * 0.68f
+        var dx = ((x - entry.cx) / radius).coerceIn(-1f, 1f)
+        var dy = ((y - entry.cy) / radius).coerceIn(-1f, 1f)
+        val magnitude = hypot(dx, dy)
+        if (magnitude > 1f) { dx /= magnitude; dy /= magnitude }
+        entry.stickX = dx
+        entry.stickY = dy
+        onAnalogStick?.invoke(left, dx, dy)
+        invalidate()
     }
 
     private fun forwardPointers(event: MotionEvent, pointerIdBits: Int) {
@@ -1075,6 +1122,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit) 
         ControllerPrefs.setScreenKeys(
             context,
             entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels) },
+            profile,
         )
     }
 

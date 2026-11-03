@@ -50,6 +50,7 @@ import com.droiddeck.launcher.input.PC_KEY_ROWS
 import com.droiddeck.launcher.input.PC_MODIFIERS
 import com.droiddeck.launcher.input.PcKey
 import com.droiddeck.launcher.input.pcKeyLabel
+import com.droiddeck.launcher.input.GamepadTouchCodes
 
 @Composable
 fun ScreenKeyPicker(
@@ -102,7 +103,7 @@ fun ScreenKeyPicker(
                                     modifier = if (code == null) Modifier else Modifier.clickable { picked = picked - code },
                                 ) {
                                     Text(
-                                        if (code == null) arrow else "$arrow ${pcKeyLabel(LocalContext.current, code)}",
+                                        if (code == null) arrow else "$arrow ${GamepadTouchCodes.label(code) ?: pcKeyLabel(LocalContext.current, code)}",
                                         Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelMedium,
                                     )
@@ -114,7 +115,26 @@ fun ScreenKeyPicker(
                                     shape = RoundedCornerShape(8.dp), color = p.primary.copy(alpha = 0.16f),
                                     modifier = Modifier.clickable { picked = picked - code },
                                 ) {
-                                    Text(pcKeyLabel(LocalContext.current, code), Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium)
+                                    Text(GamepadTouchCodes.label(code) ?: pcKeyLabel(LocalContext.current, code), Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                    Text("GAMEPAD", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = p.onBackground.copy(alpha = 0.65f))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        (GamepadTouchCodes.buttons + GamepadTouchCodes.dpad + listOf(GamepadTouchCodes.LEFT_ANALOG, GamepadTouchCodes.RIGHT_ANALOG) + GamepadTouchCodes.leftStick + GamepadTouchCodes.rightStick).forEach { code ->
+                            val selected = code in picked
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) p.primary.copy(alpha = 0.2f) else p.surface,
+                                border = BorderStroke(1.dp, if (selected) p.primary else p.line),
+                                modifier = Modifier.height(34.dp).clickable { toggle(code) },
+                            ) {
+                                Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                                    Text(GamepadTouchCodes.label(code).orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1)
                                 }
                             }
                         }

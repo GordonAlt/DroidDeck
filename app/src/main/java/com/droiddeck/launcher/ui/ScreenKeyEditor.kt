@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.droiddeck.launcher.R
+import com.droiddeck.launcher.input.GamepadTouchCodes
 import com.droiddeck.launcher.input.SCREEN_KEY_CIRCLE
 import com.droiddeck.launcher.input.SCREEN_KEY_DPAD
 import com.droiddeck.launcher.input.SCREEN_KEY_PILL
@@ -243,7 +244,7 @@ fun ScreenKeyEditor(
                         directions.forEachIndexed { index, arrow ->
                             val code = codes.getOrNull(index) ?: 0
                             Chip(
-                                if (code == 0) arrow else "$arrow ${pcKeyLabel(context, code)}",
+                                if (code == 0) arrow else "$arrow ${GamepadTouchCodes.label(code) ?: pcKeyLabel(context, code)}",
                                 code != 0, Modifier.weight(1f),
                             ) { onDirection(index) }
                         }
