@@ -25,7 +25,7 @@ class ScreenKeysTest {
 
     @Test fun missesAreForwardedAsTheirOwnTouchStreamWhileAKeyIsHeld() {
         val sent = mutableListOf<Pair<Int, Boolean>>()
-        val keys = ScreenKeys(context) { code, down -> sent += code to down }
+        val keys = ScreenKeys(context, { code, down -> sent += code to down })
         keys.layout(0, 0, 1000, 600)
         keys.add(listOf(KeyEvent.KEYCODE_W))
         val forwarded = mutableListOf<Pair<Int, Int>>()
@@ -69,7 +69,7 @@ class ScreenKeysTest {
     }
 
     @Test fun takesTouchAtMatchesWhatATouchDoes() {
-        val keys = ScreenKeys(context) { _, _ -> }
+        val keys = ScreenKeys(context, { _, _ -> })
         keys.layout(0, 0, 1000, 600)
         keys.add(listOf(KeyEvent.KEYCODE_W))
         var checked = 0
@@ -86,7 +86,7 @@ class ScreenKeysTest {
 
     @Test fun loadingLayoutReleasesLatchedKeysBeforeReplacingEntries() {
         val sent = mutableListOf<Pair<Int, Boolean>>()
-        val keys = ScreenKeys(context) { code, down -> sent += code to down }
+        val keys = ScreenKeys(context, { code, down -> sent += code to down })
         keys.layout(0, 0, 1000, 600)
         keys.add(listOf(KeyEvent.KEYCODE_SHIFT_LEFT))
         keys.setToggle(listOf(KeyEvent.KEYCODE_SHIFT_LEFT), true)
@@ -100,7 +100,7 @@ class ScreenKeysTest {
 
     @Test fun hidingTheViewReleasesLatchedKeys() {
         val sent = mutableListOf<Pair<Int, Boolean>>()
-        val keys = ScreenKeys(context) { code, down -> sent += code to down }
+        val keys = ScreenKeys(context, { code, down -> sent += code to down })
         keys.layout(0, 0, 1000, 600)
         keys.add(listOf(KeyEvent.KEYCODE_SHIFT_LEFT))
         keys.setToggle(listOf(KeyEvent.KEYCODE_SHIFT_LEFT), true)
