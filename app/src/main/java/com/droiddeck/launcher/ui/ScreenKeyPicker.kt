@@ -51,6 +51,7 @@ import com.droiddeck.launcher.input.PC_MODIFIERS
 import com.droiddeck.launcher.input.PcKey
 import com.droiddeck.launcher.input.pcKeyLabel
 import com.droiddeck.launcher.input.GamepadTouchCodes
+import com.droiddeck.launcher.input.ScreenKeyActions
 
 @Composable
 fun ScreenKeyPicker(
@@ -60,6 +61,8 @@ fun ScreenKeyPicker(
     sequence: Boolean = false,
     sequenceLimit: Int = 4,
     slots: List<String> = emptyList(),
+    onAddAction: (String) -> Unit = {},
+    allowActions: Boolean = true,
 ) {
     var picked by remember { mutableStateOf(initial) }
     val p = LocalPalette.current
@@ -119,6 +122,21 @@ fun ScreenKeyPicker(
                                 }
                             }
                         }
+                    }
+                    if (allowActions) {
+                    Text("MOUSE CONTROLS", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = p.onBackground.copy(alpha = 0.65f))
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            ScreenKeyActions.MOUSE_LEFT to "Left click", ScreenKeyActions.MOUSE_RIGHT to "Right click",
+                            ScreenKeyActions.MOUSE_MIDDLE to "Middle click", ScreenKeyActions.MOUSE_REGION_ABSOLUTE to "Mouse area",
+                            ScreenKeyActions.MOUSE_REGION_RELATIVE to "Relative mouse", ScreenKeyActions.SCROLL_UP to "Scroll up",
+                            ScreenKeyActions.SCROLL_DOWN to "Scroll down",
+                        ).forEach { (action, title) ->
+                            Surface(shape = RoundedCornerShape(8.dp), color = p.surface, border = BorderStroke(1.dp, p.line), modifier = Modifier.height(34.dp).clickable { onAddAction(action) }) {
+                                Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { Text(title, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+                            }
+                        }
+                    }
                     }
                     Text("GAMEPAD", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = p.onBackground.copy(alpha = 0.65f))
                     Row(

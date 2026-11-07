@@ -175,7 +175,7 @@ object ControllerPrefs {
     }
 
     fun encodeScreenKeys(keys: List<ScreenKey>): String = keys.joinToString(";") {
-        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:${if (it.labels) 1 else 0}"
+        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:${if (it.labels) 1 else 0}:${escape(it.action)}"
     }
 
     fun decodeScreenKeys(raw: String): List<ScreenKey> = raw.split(';').mapNotNull { entry ->
@@ -192,6 +192,7 @@ object ControllerPrefs {
             parts.getOrNull(6)?.toIntOrNull()?.coerceIn(SCREEN_KEY_PILL, SCREEN_KEY_STICK) ?: SCREEN_KEY_PILL,
             parts.getOrNull(7) == "1",
             parts.getOrNull(8) != "0",
+            parts.getOrNull(9)?.let(::unescape).orEmpty(),
         )
     }
 

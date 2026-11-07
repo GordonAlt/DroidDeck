@@ -81,6 +81,7 @@ private val CHIP_PADDING = androidx.compose.foundation.layout.PaddingValues(hori
 @Composable
 fun ScreenKeyEditor(
     codes: List<Int>,
+    action: String = "",
     keyY: Float,
     size: Int,
     opacity: Float,
@@ -177,7 +178,7 @@ fun ScreenKeyEditor(
                             )
                         }
                     }
-                    if (button) {
+                    if (button && action.isEmpty()) {
                         IconButton(onClick = onBind, modifier = Modifier.width(38.dp).focusGlide(CircleShape)) {
                             Icon(
                                 Icons.Default.Keyboard, stringResource(R.string.screen_key_bind),

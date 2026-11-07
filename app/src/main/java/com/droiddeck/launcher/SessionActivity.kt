@@ -228,6 +228,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var screenKeysShown by mutableStateOf(true)
     private var screenLayoutNames by mutableStateOf(listOf<String>())
     private var screenKeys: ScreenKeys? = null
+    private var mouseTouchControls: com.droiddeck.launcher.input.MouseTouchControls? = null
     private var recognizedGesture by mutableStateOf<TouchscreenGestures.Gesture?>(null)
     private var gesturePointerX = 0f
     private var gesturePointerY = 0f
@@ -682,6 +683,27 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             keys.steamStyle = { steamTouchControls?.style }
             keys.visibility = if (screenKeysShown) View.VISIBLE else View.GONE
             root.addView(keys)
+        }
+        mouseTouchControls = com.droiddeck.launcher.input.MouseTouchControls(this).also { mouse ->
+            mouse.onRelativeMove = { dx, dy ->
+                drawnRect()?.let { rect ->
+                    val scale = sceneScale(rect)
+                    sendSceneDelta(dx * scale, dy * scale)
+                }
+            }
+            mouse.onAbsoluteMove = { x, y ->
+                movePointer(mouse.left - surfaceView.left + x, mouse.top - surfaceView.top + y)
+            }
+            mouse.onButton = { code, pressed -> sendSceneButton(code, pressed) }
+            mouse.onWheel = ::sendSceneWheel
+            mouse.onTouchMiss = miss@{ event ->
+                if (!gestureTouchStreamGate.accepts(GestureTouchStreamGate.Source.SCREEN_KEYS, event)) return@miss
+                event.offsetLocation(mouse.left - surfaceView.left.toFloat(), mouse.top - surfaceView.top.toFloat())
+                onTouchEvent(event)
+            }
+            root.addView(mouse, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
+            ))
         }
         keyboard = KeyboardHost(this).also { host ->
             host.onImeChanged = { updateDesktopKeyboardButton() }
@@ -3896,6 +3918,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onStop() {
+        mouseTouchControls?.releaseAll()
         if (runtimeRemovalBlocked) { super.onStop(); return }
         started = false
         if (::hud.isInitialized) hud.setBackgrounded(true)
@@ -3980,6 +4003,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onPause() {
+        mouseTouchControls?.releaseAll()
         com.droiddeck.launcher.input.HomeButtonShortcuts.detach(this)
         if (runtimeRemovalBlocked) { super.onPause(); return }
         physicalShortcuts.clear()

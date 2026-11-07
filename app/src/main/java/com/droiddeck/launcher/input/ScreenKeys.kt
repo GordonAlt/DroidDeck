@@ -33,6 +33,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         var shape = SCREEN_KEY_PILL
         var toggle = false
         var labels = true
+        var action = ""
         var armed = -1
         var cx = 0f
         var cy = 0f
@@ -49,6 +50,9 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private val stickEntries = HashMap<Int, Entry>()
     private val stickCodes = HashMap<Int, List<Int>>()
     private val analogSticks = HashMap<Int, Pair<Entry, Boolean>>()
+    private val mouseDown = HashMap<Int, Entry>()
+    private val mouseRegions = HashMap<Int, Triple<Entry, Float, Float>>()
+    private val mouseButtonOwners = HashMap<Int, Int>()
     private val held = HashMap<Int, Int>()
     private var forwardedPointerBits = 0
     private var addX = -1f
@@ -84,6 +88,10 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     var onAdd: (() -> Unit)? = null
     var onSelect: ((List<Int>) -> Unit)? = null
     var onAnalogStick: ((Boolean, Float, Float) -> Unit)? = null
+    var onMouseButton: ((Int, Boolean) -> Unit)? = null
+    /** absolute gives normalized region coordinates; relative gives per-event pixel deltas. */
+    var onMouseMove: ((absolute: Boolean, x: Float, y: Float) -> Unit)? = null
+    var onMouseWheel: ((Int) -> Unit)? = null
     var onEditingChanged: ((Boolean) -> Unit)? = null
     var onTouchMiss: ((MotionEvent) -> Unit)? = null
 
@@ -154,6 +162,30 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         invalidate()
     }
 
+    fun addAction(action: String) {
+        val code = ScreenKeyActions.code(action) ?: return
+        val codes = listOf(code)
+        entries.firstOrNull { it.action == action }?.let { selected = it; invalidate(); return }
+        val entry = Entry(codes).also {
+            it.action = action
+            it.shape = SCREEN_KEY_RECT
+            it.size = if (action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || action == ScreenKeyActions.MOUSE_REGION_RELATIVE) 120 else DEFAULT_SIZE
+            it.text = ScreenKeyActions.label(action)
+        }
+        if (addX >= 0f && width > 0) {
+            entry.x = (addX / width).coerceIn(0.05f, 0.95f)
+            entry.y = (addY / height).coerceIn(0.05f, 0.95f)
+        } else {
+            entry.x = (0.30f + 0.08f * (entries.size % 5)).coerceAtMost(0.70f)
+            entry.y = 0.62f
+        }
+        addX = -1f; addY = -1f
+        entries += entry
+        if (width > 0) measure(entry)
+        selected = entry
+        save(); invalidate()
+    }
+
     fun remove(codes: List<Int>) {
         val entry = entries.firstOrNull { it.codes == codes } ?: return
         entries.remove(entry)
@@ -181,6 +213,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.shape = if (GamepadTouchCodes.LEFT_ANALOG in to || GamepadTouchCodes.RIGHT_ANALOG in to) SCREEN_KEY_STICK else old.shape
             it.toggle = old.toggle
             it.labels = old.labels
+            it.action = old.action
         }
         entries[index] = fresh
         measure(fresh)
@@ -268,6 +301,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.shape = entry.shape
             it.toggle = entry.toggle
             it.labels = entry.labels
+            it.action = entry.action
         }
         entries[entries.indexOf(entry)] = updated
         measure(updated)
@@ -280,7 +314,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private fun trimmed(codes: List<Int>): List<Int> = codes.dropLastWhile { it == 0 }.ifEmpty { listOf(0) }
 
     fun stateOf(codes: List<Int>): ScreenKey? = entries.firstOrNull { it.codes == codes }?.let {
-        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels)
+        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action)
     }
 
     fun deselect() {
@@ -335,6 +369,10 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     fun releaseAll() {
+        mouseDown.values.forEach(::release)
+        mouseDown.clear(); mouseRegions.clear()
+        mouseButtonOwners.toMap().forEach { (button, _) -> onMouseButton?.invoke(button, false) }
+        mouseButtonOwners.clear()
         dpadDown.values.forEach { releaseKey(it) }
         dpadDown.clear()
         entries.forEach { it.armed = -1 }
@@ -372,11 +410,13 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         it.shape = key.shape
         it.toggle = key.toggle
         it.labels = key.labels
+        it.action = key.action.ifEmpty { ScreenKeyActions.fromCode(key.codes.singleOrNull() ?: 0).orEmpty() }
     }
 
     private fun label(entry: Entry) = when {
         entry.text.isNotEmpty() -> entry.text
         entry.glyph.isNotEmpty() -> entry.glyph
+        entry.action.isNotEmpty() -> ScreenKeyActions.label(entry.action)
         else -> screenKeyLabel(context, entry.codes)
     }
 
@@ -394,6 +434,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         val h = dp(entry.size.toFloat())
         entry.halfH = h / 2f
         entry.halfW = when {
+            entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || entry.action == ScreenKeyActions.MOUSE_REGION_RELATIVE -> h * 1.35f
             entry.shape == SCREEN_KEY_CIRCLE -> entry.halfH
             entry.shape == SCREEN_KEY_TRIGGER -> entry.halfH * 1.7f
             entry.shape == SCREEN_KEY_DPAD || entry.shape == SCREEN_KEY_STICK -> entry.halfH * 1.15f
@@ -409,7 +450,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun hasIcon(entry: Entry): Boolean =
-        entry.text.isEmpty() && entry.glyph.isEmpty() && entry.codes.size == 1 && ScreenKeyIcons.has(entry.codes[0])
+        entry.action.isEmpty() && entry.text.isEmpty() && entry.glyph.isEmpty() && entry.codes.size == 1 && ScreenKeyIcons.has(entry.codes[0])
 
     private fun unit() = minOf(width / 1280f, height / 720f)
 
@@ -681,7 +722,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             return
         }
         val style = if (followSteam) steamStyle() else null
-        val engaged = down.values.any { it === entry } || latched.contains(entry)
+        val engaged = down.values.any { it === entry } || mouseDown.values.any { it === entry } || latched.contains(entry)
         val bitmap = bitmapFor(entry)
         val icon = bitmap == null && hasIcon(entry)
         val frameless = entry.text.isBlank() && (bitmap != null || icon)
@@ -834,6 +875,15 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     return true
                 }
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
+                if (entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || entry.action == ScreenKeyActions.MOUSE_REGION_RELATIVE) {
+                    val pid = event.getPointerId(index)
+                    val px = event.getX(index); val py = event.getY(index)
+                    mouseRegions[pid] = Triple(entry, px, py)
+                    if (entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE) {
+                        onMouseMove?.invoke(true, ((px - (entry.cx - entry.halfW)) / (entry.halfW * 2f)).coerceIn(0f, 1f), ((py - (entry.cy - entry.halfH)) / (entry.halfH * 2f)).coerceIn(0f, 1f))
+                    }
+                    return true
+                }
                 if (entry.shape == SCREEN_KEY_DPAD) {
                     val arm = armOf(entry, event.getX(index), event.getY(index))
                     val code = entry.codes.getOrNull(arm) ?: 0
@@ -869,17 +919,28 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     invalidate()
                     return true
                 }
+                if (entry.action == ScreenKeyActions.SCROLL_UP || entry.action == ScreenKeyActions.SCROLL_DOWN) {
+                    pressEntry(entry)
+                    return true
+                }
+                if (entry.action == ScreenKeyActions.MOUSE_LEFT || entry.action == ScreenKeyActions.MOUSE_RIGHT || entry.action == ScreenKeyActions.MOUSE_MIDDLE) {
+                    val pid = event.getPointerId(index)
+                    mouseDown[pid] = entry
+                    pressEntry(entry)
+                    invalidate()
+                    return true
+                }
                 if (entry.toggle) {
                     if (latched.remove(entry)) release(entry) else {
                         latched += entry
-                        entry.codes.forEach { pressKey(it) }
+                        pressEntry(entry)
                     }
                     invalidate()
                     return true
                 }
                 if (down.values.any { it === entry }) return true
                 down[event.getPointerId(index)] = entry
-                entry.codes.forEach { pressKey(it) }
+                pressEntry(entry)
                 invalidate()
                 return true
             }
@@ -888,6 +949,17 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
                 repeat(event.pointerCount) { index ->
                     val pid = event.getPointerId(index)
+                    val region = mouseRegions[pid]
+                    if (region != null) {
+                        val (entry, prevX, prevY) = region
+                        val x = event.getX(index); val y = event.getY(index)
+                        if (entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE) {
+                            onMouseMove?.invoke(true, ((x - (entry.cx - entry.halfW)) / (entry.halfW * 2f)).coerceIn(0f, 1f), ((y - (entry.cy - entry.halfH)) / (entry.halfH * 2f)).coerceIn(0f, 1f))
+                        } else {
+                            onMouseMove?.invoke(false, x - prevX, y - prevY)
+                        }
+                        mouseRegions[pid] = Triple(entry, x, y)
+                    }
                     val analog = analogSticks[pid]
                     if (analog != null) updateAnalogStick(analog.first, analog.second, event.getX(index), event.getY(index))
                 }
@@ -911,6 +983,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val pid = event.getPointerId(event.actionIndex)
+                mouseRegions.remove(pid)
+                mouseDown.remove(pid)?.let { release(it); return true }
                 if (forwardedPointerBits and (1 shl pid) != 0) {
                     forwardPointers(event, forwardedPointerBits)
                     forwardedPointerBits = forwardedPointerBits and (1 shl pid).inv()
@@ -946,6 +1020,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             MotionEvent.ACTION_CANCEL -> {
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
                 forwardedPointerBits = 0
+                mouseDown.values.forEach(::release)
+                mouseDown.clear(); mouseRegions.clear()
                 stickCodes.values.flatten().forEach { if (it != 0) releaseKey(it) }
                 stickCodes.clear()
                 stickEntries.clear()
@@ -1083,6 +1159,39 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         return true
     }
 
+    private fun pressEntry(entry: Entry) {
+        when (entry.action) {
+            ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
+                val button = mouseButtonCode(entry.action)
+                val owners = mouseButtonOwners[button] ?: 0
+                mouseButtonOwners[button] = owners + 1
+                if (owners == 0) onMouseButton?.invoke(button, true)
+            }
+            ScreenKeyActions.SCROLL_UP -> onMouseWheel?.invoke(1)
+            ScreenKeyActions.SCROLL_DOWN -> onMouseWheel?.invoke(-1)
+            else -> entry.codes.forEach(::pressKey)
+        }
+    }
+
+    private fun releaseEntry(entry: Entry) {
+        when (entry.action) {
+            ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
+                val button = mouseButtonCode(entry.action)
+                val owners = mouseButtonOwners[button] ?: return
+                if (owners <= 1) { mouseButtonOwners.remove(button); onMouseButton?.invoke(button, false) }
+                else mouseButtonOwners[button] = owners - 1
+            }
+            ScreenKeyActions.SCROLL_UP, ScreenKeyActions.SCROLL_DOWN -> Unit
+            else -> entry.codes.asReversed().forEach(::releaseKey)
+        }
+    }
+
+    private fun mouseButtonCode(action: String): Int = when (action) {
+        ScreenKeyActions.MOUSE_RIGHT -> 0x111
+        ScreenKeyActions.MOUSE_MIDDLE -> 0x112
+        else -> 0x110
+    }
+
     private fun pressKey(code: Int) {
         val owners = held[code] ?: 0
         held[code] = owners + 1
@@ -1100,12 +1209,12 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun release(entry: Entry) {
-        entry.codes.asReversed().forEach { releaseKey(it) }
+        releaseEntry(entry)
         invalidate()
     }
 
     fun export(): String = ControllerPrefs.encodeScreenKeys(
-        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels) },
+        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action) },
     )
 
     fun load(raw: String) {
@@ -1121,7 +1230,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private fun save() {
         ControllerPrefs.setScreenKeys(
             context,
-            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels) },
+            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action) },
             profile,
         )
     }

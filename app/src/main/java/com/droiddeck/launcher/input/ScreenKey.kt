@@ -27,6 +27,31 @@ const val SCREEN_KEY_TRIGGER = 4
 const val SCREEN_KEY_DPAD = 5
 const val SCREEN_KEY_STICK = 6
 
+/** Semantic actions for on-screen mouse controls; they are routed separately from key/gamepad codes. */
+object ScreenKeyActions {
+    const val MOUSE_LEFT = "mouse-left"
+    const val MOUSE_RIGHT = "mouse-right"
+    const val MOUSE_MIDDLE = "mouse-middle"
+    const val MOUSE_REGION_ABSOLUTE = "mouse-region-absolute"
+    const val MOUSE_REGION_RELATIVE = "mouse-region-relative"
+    const val SCROLL_UP = "scroll-up"
+    const val SCROLL_DOWN = "scroll-down"
+
+    private val ids = mapOf(
+        MOUSE_LEFT to -2001, MOUSE_RIGHT to -2002, MOUSE_MIDDLE to -2003,
+        MOUSE_REGION_ABSOLUTE to -2004, MOUSE_REGION_RELATIVE to -2005,
+        SCROLL_UP to -2006, SCROLL_DOWN to -2007,
+    )
+    fun code(action: String): Int? = ids[action]
+    fun fromCode(code: Int): String? = ids.entries.firstOrNull { it.value == code }?.key
+    fun label(action: String): String = when (action) {
+        MOUSE_LEFT -> "LMB"; MOUSE_RIGHT -> "RMB"; MOUSE_MIDDLE -> "MMB"
+        MOUSE_REGION_ABSOLUTE -> "MOUSE AREA"; MOUSE_REGION_RELATIVE -> "REL MOUSE"
+        SCROLL_UP -> "SCROLL ↑"; SCROLL_DOWN -> "SCROLL ↓"
+        else -> "CONTROL"
+    }
+}
+
 val SCREEN_KEY_DPAD_DIRS = listOf("↑", "→", "↓", "←")
 val SCREEN_KEY_STICK_DIRS = listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")
 
@@ -54,6 +79,7 @@ data class ScreenKey(
     val shape: Int = SCREEN_KEY_PILL,
     val toggle: Boolean = false,
     val labels: Boolean = true,
+    val action: String = "",
 ) {
     fun shownLabel(context: Context): String = when {
         text.isNotEmpty() -> text
