@@ -47,7 +47,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.droiddeck.launcher.R
 import com.droiddeck.launcher.input.PC_KEYS
 import com.droiddeck.launcher.input.PC_KEY_ROWS
-import com.droiddeck.launcher.input.PC_MODIFIERS
 import com.droiddeck.launcher.input.PcKey
 import com.droiddeck.launcher.input.pcKeyLabel
 import com.droiddeck.launcher.input.GamepadTouchCodes
@@ -63,16 +62,15 @@ fun ScreenKeyPicker(
     slots: List<String> = emptyList(),
     onAddAction: (String) -> Unit = {},
     allowActions: Boolean = true,
+    allowEmpty: Boolean = false,
 ) {
     var picked by remember { mutableStateOf(initial) }
     val p = LocalPalette.current
     val toggle: (Int) -> Unit = { code ->
         picked = if (sequence) {
             if (code in picked) picked - code else (picked + code).take(sequenceLimit)
-        } else if (code in PC_MODIFIERS) {
-            if (code in picked) picked - code else picked + code
         } else {
-            picked.filter { it in PC_MODIFIERS } + code
+            if (code in picked) picked - code else picked + code
         }
     }
     val rows = remember {
@@ -129,8 +127,10 @@ fun ScreenKeyPicker(
                         listOf(
                             ScreenKeyActions.MOUSE_LEFT to "Left click", ScreenKeyActions.MOUSE_RIGHT to "Right click",
                             ScreenKeyActions.MOUSE_MIDDLE to "Middle click", ScreenKeyActions.MOUSE_REGION_ABSOLUTE to "Mouse area",
-                            ScreenKeyActions.MOUSE_REGION_RELATIVE to "Relative mouse", ScreenKeyActions.SCROLL_UP to "Scroll up",
-                            ScreenKeyActions.SCROLL_DOWN to "Scroll down",
+                            ScreenKeyActions.MOUSE_REGION_RELATIVE to "Relative mouse",
+                            ScreenKeyActions.SCROLL_UP to "Scroll up once", ScreenKeyActions.SCROLL_DOWN to "Scroll down once",
+                            ScreenKeyActions.SCROLL_UP_CONTINUOUS to "Scroll up while held",
+                            ScreenKeyActions.SCROLL_DOWN_CONTINUOUS to "Scroll down while held",
                         ).forEach { (action, title) ->
                             Surface(shape = RoundedCornerShape(8.dp), color = p.surface, border = BorderStroke(1.dp, p.line), modifier = Modifier.height(34.dp).clickable { onAddAction(action) }) {
                                 Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { Text(title, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
@@ -174,10 +174,10 @@ fun ScreenKeyPicker(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { onAdd(picked) },
-                            enabled = picked.isNotEmpty(),
+                            enabled = picked.isNotEmpty() || allowEmpty,
                             modifier = Modifier.weight(1f).focusGlide(CircleShape),
                         ) {
-                            Text(stringResource(R.string.screen_keys_add))
+                            Text(if (picked.isEmpty() && allowEmpty) "Clear direction" else stringResource(R.string.screen_keys_add))
                         }
                     }
                 }

@@ -36,11 +36,14 @@ object ScreenKeyActions {
     const val MOUSE_REGION_RELATIVE = "mouse-region-relative"
     const val SCROLL_UP = "scroll-up"
     const val SCROLL_DOWN = "scroll-down"
+    const val SCROLL_UP_CONTINUOUS = "scroll-up-continuous"
+    const val SCROLL_DOWN_CONTINUOUS = "scroll-down-continuous"
 
     private val ids = mapOf(
         MOUSE_LEFT to -2001, MOUSE_RIGHT to -2002, MOUSE_MIDDLE to -2003,
         MOUSE_REGION_ABSOLUTE to -2004, MOUSE_REGION_RELATIVE to -2005,
         SCROLL_UP to -2006, SCROLL_DOWN to -2007,
+        SCROLL_UP_CONTINUOUS to -2008, SCROLL_DOWN_CONTINUOUS to -2009,
     )
     fun code(action: String): Int? = ids[action]
     fun fromCode(code: Int): String? = ids.entries.firstOrNull { it.value == code }?.key
@@ -48,6 +51,7 @@ object ScreenKeyActions {
         MOUSE_LEFT -> "LMB"; MOUSE_RIGHT -> "RMB"; MOUSE_MIDDLE -> "MMB"
         MOUSE_REGION_ABSOLUTE -> "MOUSE AREA"; MOUSE_REGION_RELATIVE -> "REL MOUSE"
         SCROLL_UP -> "SCROLL ↑"; SCROLL_DOWN -> "SCROLL ↓"
+        SCROLL_UP_CONTINUOUS -> "SCROLL ↑ HOLD"; SCROLL_DOWN_CONTINUOUS -> "SCROLL ↓ HOLD"
         else -> "CONTROL"
     }
 }
@@ -80,6 +84,7 @@ data class ScreenKey(
     val toggle: Boolean = false,
     val labels: Boolean = true,
     val action: String = "",
+    val directionBindings: List<List<Int>> = emptyList(),
 ) {
     fun shownLabel(context: Context): String = when {
         text.isNotEmpty() -> text

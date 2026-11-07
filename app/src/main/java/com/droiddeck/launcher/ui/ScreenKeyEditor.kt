@@ -82,6 +82,7 @@ private val CHIP_PADDING = androidx.compose.foundation.layout.PaddingValues(hori
 fun ScreenKeyEditor(
     codes: List<Int>,
     action: String = "",
+    directionBindings: List<List<Int>> = emptyList(),
     keyY: Float,
     size: Int,
     opacity: Float,
@@ -234,7 +235,7 @@ fun ScreenKeyEditor(
                         stringResource(R.string.screen_key_toggle), Modifier.padding(start = 6.dp, end = 2.dp),
                         style = MaterialTheme.typography.bodySmall, maxLines = 1,
                     )
-                    Switch(checked = toggle, onCheckedChange = onToggle, modifier = Modifier.height(30.dp).focusGlide())
+                    Switch(checked = toggle, onCheckedChange = onToggle, enabled = action.isEmpty(), modifier = Modifier.height(30.dp).focusGlide())
                 }
                 if (directions.isNotEmpty()) {
                     Row(
@@ -243,10 +244,14 @@ fun ScreenKeyEditor(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         directions.forEachIndexed { index, arrow ->
-                            val code = codes.getOrNull(index) ?: 0
+                            val bound = directionBindings.getOrNull(index)
+                                ?: listOfNotNull(codes.getOrNull(index)?.takeIf { it != 0 })
+                            val label = bound.joinToString("+") { code ->
+                                GamepadTouchCodes.label(code) ?: pcKeyLabel(context, code)
+                            }
                             Chip(
-                                if (code == 0) arrow else "$arrow ${GamepadTouchCodes.label(code) ?: pcKeyLabel(context, code)}",
-                                code != 0, Modifier.weight(1f),
+                                if (label.isEmpty()) arrow else "$arrow $label",
+                                bound.isNotEmpty(), Modifier.weight(1f),
                             ) { onDirection(index) }
                         }
                         Text(

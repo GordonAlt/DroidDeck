@@ -21,6 +21,7 @@ import kotlin.math.round
 
 class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, private val profile: String? = null) : View(context) {
     private class Entry(val codes: List<Int>) {
+        var directionBindings: List<List<Int>> = emptyList()
         var glyph = ""
         var text = ""
         var image = ""
@@ -53,6 +54,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private val mouseDown = HashMap<Int, Entry>()
     private val mouseRegions = HashMap<Int, Triple<Entry, Float, Float>>()
     private val mouseButtonOwners = HashMap<Int, Int>()
+    private val scrollRepeaters = HashMap<Entry, Runnable>()
     private val held = HashMap<Int, Int>()
     private var forwardedPointerBits = 0
     private var addX = -1f
@@ -214,6 +216,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.toggle = old.toggle
             it.labels = old.labels
             it.action = old.action
+            it.directionBindings = when {
+                it.shape == SCREEN_KEY_STICK &&
+                    GamepadTouchCodes.LEFT_ANALOG !in to && GamepadTouchCodes.RIGHT_ANALOG !in to -> when {
+                    old.directionBindings.size == 8 -> old.directionBindings.map { group -> group.toList() }
+                    old.shape == SCREEN_KEY_DPAD -> legacyDirectionBindings(to)
+                    else -> defaultKeyboardStickBindings()
+                }
+                it.shape == SCREEN_KEY_DPAD -> legacyDirectionBindings(to)
+                else -> old.directionBindings.map { group -> group.toList() }
+            }
         }
         entries[index] = fresh
         measure(fresh)
@@ -260,7 +272,19 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
 
     fun setShape(codes: List<Int>, shape: Int) {
         val entry = entries.firstOrNull { it.codes == codes } ?: return
-        entry.shape = shape.coerceIn(SCREEN_KEY_PILL, SCREEN_KEY_STICK)
+        val nextShape = shape.coerceIn(SCREEN_KEY_PILL, SCREEN_KEY_STICK)
+        if (nextShape == SCREEN_KEY_STICK &&
+            GamepadTouchCodes.LEFT_ANALOG !in entry.codes &&
+            GamepadTouchCodes.RIGHT_ANALOG !in entry.codes &&
+            entry.directionBindings.size != 8
+        ) {
+            entry.directionBindings = if (entry.shape == SCREEN_KEY_DPAD) {
+                legacyDirectionBindings(entry.codes)
+            } else {
+                defaultKeyboardStickBindings()
+            }
+        }
+        entry.shape = nextShape
         measure(entry)
         save()
         invalidate()
@@ -268,7 +292,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
 
     fun setToggle(codes: List<Int>, toggle: Boolean) {
         val entry = entries.firstOrNull { it.codes == codes } ?: return
-        entry.toggle = toggle
+        entry.toggle = toggle && entry.action.isEmpty()
         if (!toggle && latched.remove(entry)) release(entry)
         save()
         invalidate()
@@ -281,14 +305,14 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         invalidate()
     }
 
-    fun setDirection(codes: List<Int>, index: Int, code: Int): ScreenKey? {
-        val entry = entries.firstOrNull { it.codes == codes } ?: entries.firstOrNull { it.codes == trimmed(codes) } ?: return null
-        val next = entry.codes.toMutableList()
-        while (next.size <= index) next += 0
-        next[index] = code
-        val nextCodes = trimmed(next)
-        if (entries.any { it !== entry && it.codes == nextCodes }) return null
-        val updated = Entry(nextCodes).also {
+    fun setDirection(codes: List<Int>, index: Int, selectedCodes: List<Int>): ScreenKey? {
+        if (index !in 0..7) return null
+        val entry = entries.firstOrNull { it.codes == codes } ?: return null
+        val bindings = (if (entry.directionBindings.size == 8) entry.directionBindings
+            else legacyDirectionBindings(entry.codes)).map { it.toList() }.toMutableList()
+        bindings[index] = selectedCodes.filter { it > 0 }.distinct()
+        val updated = Entry(entry.codes).also {
+            it.directionBindings = bindings
             it.glyph = entry.glyph
             it.text = entry.text
             it.image = entry.image
@@ -311,10 +335,25 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         return stateOf(updated.codes)
     }
 
+    private fun defaultKeyboardStickBindings(): List<List<Int>> = listOf(
+        listOf(17), listOf(17, 32), listOf(32), listOf(32, 31),
+        listOf(31), listOf(31, 30), listOf(30), listOf(30, 17),
+    )
+
+    private fun legacyDirectionBindings(codes: List<Int>): List<List<Int>> =
+        (0..7).map { index ->
+            val code = codes.getOrNull(index) ?: 0
+            if (code != 0) listOf(code)
+            else if (index % 2 == 1) listOfNotNull(
+                codes.getOrNull((index + 7) % 8)?.takeIf { it != 0 },
+                codes.getOrNull((index + 1) % 8)?.takeIf { it != 0 },
+            ).distinct() else emptyList()
+        }
+
     private fun trimmed(codes: List<Int>): List<Int> = codes.dropLastWhile { it == 0 }.ifEmpty { listOf(0) }
 
     fun stateOf(codes: List<Int>): ScreenKey? = entries.firstOrNull { it.codes == codes }?.let {
-        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action)
+        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings)
     }
 
     fun deselect() {
@@ -373,6 +412,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         mouseDown.clear(); mouseRegions.clear()
         mouseButtonOwners.toMap().forEach { (button, _) -> onMouseButton?.invoke(button, false) }
         mouseButtonOwners.clear()
+        scrollRepeaters.values.toList().forEach { removeCallbacks(it) }
+        scrollRepeaters.clear()
         dpadDown.values.forEach { releaseKey(it) }
         dpadDown.clear()
         entries.forEach { it.armed = -1 }
@@ -411,6 +452,13 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         it.toggle = key.toggle
         it.labels = key.labels
         it.action = key.action.ifEmpty { ScreenKeyActions.fromCode(key.codes.singleOrNull() ?: 0).orEmpty() }
+        it.directionBindings = when {
+            key.directionBindings.size == 8 -> key.directionBindings.map { group -> group.filter { code -> code > 0 }.distinct() }
+            (key.shape == SCREEN_KEY_STICK || key.shape == SCREEN_KEY_DPAD) &&
+                GamepadTouchCodes.LEFT_ANALOG !in key.codes && GamepadTouchCodes.RIGHT_ANALOG !in key.codes ->
+                legacyDirectionBindings(key.codes)
+            else -> emptyList()
+        }
     }
 
     private fun label(entry: Entry) = when {
@@ -610,9 +658,11 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         textPaint.setShadowLayer(0f, 0f, 0f, 0)
         STICK_DIRS.forEachIndexed { index, unit ->
             val on = entry.armed == index
-            val code = entry.codes.getOrNull(index) ?: 0
             val analog = GamepadTouchCodes.LEFT_ANALOG in entry.codes || GamepadTouchCodes.RIGHT_ANALOG in entry.codes
-            val name = if (code == 0 || analog) "" else screenKeyLabel(context, listOf(code))
+            val bound = if (analog) emptyList() else directionCodes(entry, index)
+            val name = bound.joinToString("+") { code ->
+                GamepadTouchCodes.label(code) ?: pcKeyLabel(context, code)
+            }
             if (entry.labels && name.isNotEmpty()) {
                 textPaint.color = if (on) Color.WHITE else tinted(color, 0.85f * alpha)
                 textPaint.textSize = dp(48f)
@@ -635,14 +685,15 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun directionCodes(entry: Entry, index: Int): List<Int> {
-        if (index < 0) return emptyList()
+        if (index !in 0..7) return emptyList()
+        if (entry.directionBindings.size == 8) return entry.directionBindings[index].distinct()
         val code = entry.codes.getOrNull(index) ?: 0
         if (code != 0) return listOf(code)
         if (entry.shape != SCREEN_KEY_STICK || index % 2 == 0) return emptyList()
         return listOfNotNull(
             entry.codes.getOrNull((index + 7) % 8)?.takeIf { it != 0 },
             entry.codes.getOrNull((index + 1) % 8)?.takeIf { it != 0 },
-        )
+        ).distinct()
     }
 
     private fun stickSector(entry: Entry, x: Float, y: Float): Int {
@@ -923,6 +974,14 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     pressEntry(entry)
                     return true
                 }
+                if (entry.action == ScreenKeyActions.SCROLL_UP_CONTINUOUS || entry.action == ScreenKeyActions.SCROLL_DOWN_CONTINUOUS) {
+                    val pid = event.getPointerId(index)
+                    if (down.values.any { it === entry }) return true
+                    down[pid] = entry
+                    pressEntry(entry)
+                    invalidate()
+                    return true
+                }
                 if (entry.action == ScreenKeyActions.MOUSE_LEFT || entry.action == ScreenKeyActions.MOUSE_RIGHT || entry.action == ScreenKeyActions.MOUSE_MIDDLE) {
                     val pid = event.getPointerId(index)
                     mouseDown[pid] = entry
@@ -970,11 +1029,12 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     val sector = stickSector(entry, event.getX(index), event.getY(index))
                     val codes = directionCodes(entry, sector)
                     val previous = stickCodes[pid].orEmpty()
-                    if (codes != previous) {
+                    val nextArmed = if (codes.isEmpty()) -1 else sector
+                    if (codes != previous || entry.armed != nextArmed) {
                         previous.filterNot { it in codes }.forEach { releaseKey(it) }
                         codes.filterNot { it in previous }.forEach { pressKey(it) }
                         stickCodes[pid] = codes
-                        entry.armed = if (codes.isEmpty()) -1 else sector
+                        entry.armed = nextArmed
                         invalidate()
                     }
                 }
@@ -1169,6 +1229,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             }
             ScreenKeyActions.SCROLL_UP -> onMouseWheel?.invoke(1)
             ScreenKeyActions.SCROLL_DOWN -> onMouseWheel?.invoke(-1)
+            ScreenKeyActions.SCROLL_UP_CONTINUOUS -> startContinuousScroll(entry, 1)
+            ScreenKeyActions.SCROLL_DOWN_CONTINUOUS -> startContinuousScroll(entry, -1)
             else -> entry.codes.forEach(::pressKey)
         }
     }
@@ -1182,8 +1244,28 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 else mouseButtonOwners[button] = owners - 1
             }
             ScreenKeyActions.SCROLL_UP, ScreenKeyActions.SCROLL_DOWN -> Unit
+            ScreenKeyActions.SCROLL_UP_CONTINUOUS, ScreenKeyActions.SCROLL_DOWN_CONTINUOUS ->
+                stopContinuousScroll(entry)
             else -> entry.codes.asReversed().forEach(::releaseKey)
         }
+    }
+
+    private fun startContinuousScroll(entry: Entry, direction: Int) {
+        if (scrollRepeaters.containsKey(entry)) return
+        onMouseWheel?.invoke(direction)
+        val repeat = object : Runnable {
+            override fun run() {
+                if (scrollRepeaters[entry] !== this) return
+                onMouseWheel?.invoke(direction)
+                postDelayed(this, 110L)
+            }
+        }
+        scrollRepeaters[entry] = repeat
+        postDelayed(repeat, 260L)
+    }
+
+    private fun stopContinuousScroll(entry: Entry) {
+        scrollRepeaters.remove(entry)?.let { removeCallbacks(it) }
     }
 
     private fun mouseButtonCode(action: String): Int = when (action) {
@@ -1214,7 +1296,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     fun export(): String = ControllerPrefs.encodeScreenKeys(
-        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action) },
+        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings) },
     )
 
     fun load(raw: String) {
@@ -1230,7 +1312,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private fun save() {
         ControllerPrefs.setScreenKeys(
             context,
-            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action) },
+            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings) },
             profile,
         )
     }

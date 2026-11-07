@@ -607,6 +607,16 @@ jobs:
           grep -qi "CN=Android, OU=Android, O=Android" /tmp/sig.txt \
             || { echo "::error::apk is not signed with the AOSP testkey"; exit 1; }
 
+      - name: Name APK with sequential release version
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < tools/release/apk-version.txt)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::Invalid tools/release/apk-version.txt: $VERSION"; exit 1; }
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          mv "$APK" "app/build/outputs/apk/release/DroidDeck-${VERSION}.apk"
+          echo "APK filename: DroidDeck-${VERSION}.apk" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         id: apk-upload
         with:

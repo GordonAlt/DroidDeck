@@ -174,8 +174,21 @@ object ControllerPrefs {
         prefs(context).edit().putString(key, encodeScreenKeys(keys)).apply()
     }
 
+    private fun encodeDirectionBindings(bindings: List<List<Int>>): String =
+        if (bindings.size == 8) bindings.joinToString(".") { group ->
+            group.filter { it > 0 }.distinct().joinToString("+").ifEmpty { "0" }
+        } else ""
+
+    private fun decodeDirectionBindings(raw: String?): List<List<Int>> {
+        val groups = raw?.split('.') ?: return emptyList()
+        if (groups.size != 8) return emptyList()
+        return groups.map { group ->
+            group.split('+').mapNotNull { it.toIntOrNull()?.takeIf { code -> code > 0 } }.distinct()
+        }
+    }
+
     fun encodeScreenKeys(keys: List<ScreenKey>): String = keys.joinToString(";") {
-        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:${if (it.labels) 1 else 0}:${escape(it.action)}"
+        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:${if (it.labels) 1 else 0}:${escape(it.action)}:${encodeDirectionBindings(it.directionBindings)}"
     }
 
     fun decodeScreenKeys(raw: String): List<ScreenKey> = raw.split(';').mapNotNull { entry ->
@@ -193,6 +206,7 @@ object ControllerPrefs {
             parts.getOrNull(7) == "1",
             parts.getOrNull(8) != "0",
             parts.getOrNull(9)?.let(::unescape).orEmpty(),
+            decodeDirectionBindings(parts.getOrNull(10)),
         )
     }
 

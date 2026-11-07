@@ -228,7 +228,6 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var screenKeysShown by mutableStateOf(true)
     private var screenLayoutNames by mutableStateOf(listOf<String>())
     private var screenKeys: ScreenKeys? = null
-    private var mouseTouchControls: com.droiddeck.launcher.input.MouseTouchControls? = null
     private var recognizedGesture by mutableStateOf<TouchscreenGestures.Gesture?>(null)
     private var gesturePointerX = 0f
     private var gesturePointerY = 0f
@@ -679,31 +678,24 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             keys.onAdd = { screenKeyPickerOpen = true }
             keys.onSelect = { codes -> screenKeyEdit = screenKeys?.stateOf(codes) }
             keys.onAnalogStick = { left, x, y -> gamepadTouchInput.setAnalog(left, x, y, bridge) }
+            keys.onMouseButton = { code, pressed -> sendSceneButton(code, pressed) }
+            keys.onMouseWheel = ::sendSceneWheel
+            keys.onMouseMove = { absolute, x, y ->
+                if (absolute) {
+                    drawnRect()?.let { rect ->
+                        movePointer(rect.left + x * rect.width(), rect.top + y * rect.height())
+                    }
+                } else {
+                    drawnRect()?.let { rect ->
+                        val scale = sceneScale(rect)
+                        sendSceneDelta(x * scale, y * scale)
+                    }
+                }
+            }
             keys.onEditingChanged = { if (!it) screenKeyEdit = null }
             keys.steamStyle = { steamTouchControls?.style }
             keys.visibility = if (screenKeysShown) View.VISIBLE else View.GONE
             root.addView(keys)
-        }
-        mouseTouchControls = com.droiddeck.launcher.input.MouseTouchControls(this).also { mouse ->
-            mouse.onRelativeMove = { dx, dy ->
-                drawnRect()?.let { rect ->
-                    val scale = sceneScale(rect)
-                    sendSceneDelta(dx * scale, dy * scale)
-                }
-            }
-            mouse.onAbsoluteMove = { x, y ->
-                movePointer(mouse.left - surfaceView.left + x, mouse.top - surfaceView.top + y)
-            }
-            mouse.onButton = { code, pressed -> sendSceneButton(code, pressed) }
-            mouse.onWheel = ::sendSceneWheel
-            mouse.onTouchMiss = miss@{ event ->
-                if (!gestureTouchStreamGate.accepts(GestureTouchStreamGate.Source.SCREEN_KEYS, event)) return@miss
-                event.offsetLocation(mouse.left - surfaceView.left.toFloat(), mouse.top - surfaceView.top.toFloat())
-                onTouchEvent(event)
-            }
-            root.addView(mouse, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
-            ))
         }
         keyboard = KeyboardHost(this).also { host ->
             host.onImeChanged = { updateDesktopKeyboardButton() }
@@ -1000,15 +992,27 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     val dir = screenKeyDir
                     com.droiddeck.launcher.ui.ScreenKeyPicker(
                         initial = if (dir != null) {
-                            listOfNotNull((screenKeyEdit?.codes?.getOrNull(dir) ?: 0).takeIf { it != 0 })
+                            screenKeyEdit?.directionBindings?.getOrNull(dir)
+                                ?: listOfNotNull((screenKeyEdit?.codes?.getOrNull(dir) ?: 0).takeIf { it != 0 })
                         } else {
                             screenKeyBind ?: emptyList()
+                        },
+                        allowEmpty = dir != null,
+                        allowActions = dir == null,
+                        onAddAction = { action ->
+                            screenKeys?.addAction(action)
+                            com.droiddeck.launcher.input.ScreenKeyActions.code(action)?.let { code ->
+                                screenKeyEdit = screenKeys?.stateOf(listOf(code))
+                            }
+                            screenKeyPickerOpen = false
+                            screenKeyBind = null
+                            screenKeyDir = null
                         },
                         onDismiss = { screenKeyPickerOpen = false; screenKeyBind = null; screenKeyDir = null },
                         onAdd = { codes ->
                             val bind = screenKeyBind
                             if (dir != null && bind != null) {
-                                screenKeys?.setDirection(bind, dir, codes.lastOrNull() ?: 0)?.let { screenKeyEdit = it }
+                                screenKeys?.setDirection(bind, dir, codes)?.let { screenKeyEdit = it }
                             } else if (bind != null) {
                                 screenKeys?.setCodes(bind, codes)?.let { screenKeyEdit = it }
                             } else {
@@ -1023,7 +1027,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
                 screenKeyEdit?.let { key ->
                     com.droiddeck.launcher.ui.ScreenKeyEditor(
-                        codes = key.codes, keyY = key.y,
+                        codes = key.codes, action = key.action, directionBindings = key.directionBindings, keyY = key.y,
                         size = key.size, opacity = key.opacity, shape = key.shape, toggle = key.toggle,
                         labels = key.labels,
                         text = key.text, hasImage = key.image.isNotEmpty(),
@@ -3918,7 +3922,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onStop() {
-        mouseTouchControls?.releaseAll()
+        screenKeys?.releaseAll()
         if (runtimeRemovalBlocked) { super.onStop(); return }
         started = false
         if (::hud.isInitialized) hud.setBackgrounded(true)
@@ -4003,7 +4007,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onPause() {
-        mouseTouchControls?.releaseAll()
+        screenKeys?.releaseAll()
         com.droiddeck.launcher.input.HomeButtonShortcuts.detach(this)
         if (runtimeRemovalBlocked) { super.onPause(); return }
         physicalShortcuts.clear()
