@@ -64,6 +64,7 @@ import com.droiddeck.launcher.ui.ControllerActions
 import com.droiddeck.launcher.ui.ControllerMappingPage
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.droiddeck.launcher.input.ControllerEditorActivity
+import com.droiddeck.launcher.input.ScreenKeyEditorActivity
 import com.droiddeck.launcher.ui.FrontEndScreen
 import com.droiddeck.launcher.ui.FrontEndState
 import com.droiddeck.launcher.ui.FrontEndActions
@@ -1418,6 +1419,7 @@ class FrontEndActivity : ComponentActivity() {
                             onSelectSteam = { on -> ControllerPrefs.setSelectSteam(this, on); refreshController() },
                             onJoyConVr = { on -> ControllerPrefs.setJoyConVr(this, on); refreshController() },
                             onEditLayout = { startActivity(Intent(this, ControllerEditorActivity::class.java)) },
+                            onEditScreenKeys = { startActivity(Intent(this, ScreenKeyEditorActivity::class.java)) },
                             onResetLayout = { ControllerPrefs.resetAllLayouts(this); refreshController() },
                             onMapping = { showPerformance = false; showComponents = false; showMapping = true },
                             onResetAll = { ControllerPrefs.resetAll(this); refreshController() },

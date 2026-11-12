@@ -85,6 +85,16 @@ data class ScreenKey(
     val labels: Boolean = true,
     val action: String = "",
     val directionBindings: List<List<Int>> = emptyList(),
+val width: Int = 0,
+val height: Int = 0,
+val fillColor: Int = 0,
+val borderColor: Int = 0,
+val textColor: Int = 0,
+val borderWidth: Float = 0f,
+val cornerRadius: Float = -1f,
+val radialGroup: String = "",
+val radialParent: Boolean = false,
+val radialSlot: Int = -1,
 ) {
     fun shownLabel(context: Context): String = when {
         text.isNotEmpty() -> text

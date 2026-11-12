@@ -23,6 +23,41 @@ class ScreenKeysTest {
         ControllerPrefs.setScreenKeys(context, emptyList())
     }
 
+
+    @Test fun extendedScreenKeyPropertiesRoundTripAndLegacyDefaultsRemain() {
+        val extended = ScreenKey(
+            codes = listOf(KeyEvent.KEYCODE_A),
+            x = 0.2f,
+            y = 0.7f,
+            size = 48,
+            width = 112,
+            height = 54,
+            fillColor = 0xFF1A9FFF.toInt(),
+            borderColor = 0xFFFFFFFF.toInt(),
+            textColor = 0xFF3DDC84.toInt(),
+            borderWidth = 2f,
+            cornerRadius = 12f,
+            radialGroup = "radial:one",
+            radialSlot = 3,
+        )
+        val encoded = ControllerPrefs.encodeScreenKeys(listOf(extended))
+        assertEquals(extended, ControllerPrefs.decodeScreenKeys(encoded).single())
+
+        val legacy = ControllerPrefs.decodeScreenKeys(
+            "${KeyEvent.KEYCODE_B}:0.25,0.75,44::::1.0:0:0:1::",
+        ).single()
+        assertEquals(0, legacy.width)
+        assertEquals(0, legacy.height)
+        assertEquals(0, legacy.fillColor)
+        assertEquals(0, legacy.borderColor)
+        assertEquals(0, legacy.textColor)
+        assertEquals(0f, legacy.borderWidth, 0f)
+        assertEquals(-1f, legacy.cornerRadius, 0f)
+        assertEquals("", legacy.radialGroup)
+        assertEquals(false, legacy.radialParent)
+        assertEquals(-1, legacy.radialSlot)
+    }
+
     @Test fun missesAreForwardedAsTheirOwnTouchStreamWhileAKeyIsHeld() {
         val sent = mutableListOf<Pair<Int, Boolean>>()
         val keys = ScreenKeys(context, { code, down -> sent += code to down })

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="ctrl_edit_touch_layout">On-screen controls</string>
+    <string name="ctrl_edit_touch_layout_hint">Edit touch buttons and preview the layout without starting a game.</string>
     <string name="gog_maintenance">Manage GOG installation</string>
     <string name="gog_check">Check for updates</string>
     <string name="gog_repair">Verify/Repair</string>

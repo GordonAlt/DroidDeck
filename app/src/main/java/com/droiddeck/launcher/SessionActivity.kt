@@ -1045,6 +1045,16 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                         onTextBlur = { screenKeyTextFocus = false },
                         onRemove = { screenKeys?.remove(key.codes); screenKeyEdit = null },
                         onDismiss = { screenKeyEdit = null; screenKeyTextFocus = false; screenKeys?.deselect() },
+                        width = key.width, height = key.height,
+                        fillColor = key.fillColor, borderColor = key.borderColor, textColor = key.textColor,
+                        borderWidth = key.borderWidth, cornerRadius = key.cornerRadius,
+                        onWidth = { screenKeys?.setWidth(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onHeight = { screenKeys?.setHeight(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onFillColor = { screenKeys?.setFillColor(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onBorderColor = { screenKeys?.setBorderColor(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onTextColor = { screenKeys?.setTextColor(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onBorderWidth = { screenKeys?.setBorderWidth(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
+                        onCornerRadius = { screenKeys?.setCornerRadius(key.codes, it); screenKeyEdit = screenKeys?.stateOf(key.codes) },
                     )
                 }
                 if (screenLayoutsOpen) com.droiddeck.launcher.ui.ScreenLayoutPanel(

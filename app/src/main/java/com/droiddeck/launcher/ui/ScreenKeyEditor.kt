@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -105,6 +107,20 @@ fun ScreenKeyEditor(
     onDirection: (Int) -> Unit,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
+    width: Int = 0,
+    height: Int = 0,
+    fillColor: Int = 0,
+    borderColor: Int = 0,
+    textColor: Int = 0,
+    borderWidth: Float = 0f,
+    cornerRadius: Float = -1f,
+    onWidth: (Int) -> Unit = {},
+    onHeight: (Int) -> Unit = {},
+    onFillColor: (Int) -> Unit = {},
+    onBorderColor: (Int) -> Unit = {},
+    onTextColor: (Int) -> Unit = {},
+    onBorderWidth: (Float) -> Unit = {},
+    onCornerRadius: (Float) -> Unit = {},
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
@@ -130,7 +146,7 @@ fun ScreenKeyEditor(
             shape = RoundedCornerShape(18.dp),
             color = p.background, contentColor = p.onBackground, border = BorderStroke(1.dp, p.line2),
         ) {
-            Column(Modifier.padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 6.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.DragIndicator, null,
@@ -203,6 +219,7 @@ fun ScreenKeyEditor(
                         Icon(Icons.Default.Close, null, tint = p.onBackground)
                     }
                 }
+                Text("ACTIONS", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -261,6 +278,7 @@ fun ScreenKeyEditor(
                         Switch(checked = labels, onCheckedChange = onLabels, modifier = Modifier.height(30.dp).focusGlide())
                     }
                 }
+                Text("LAYOUT", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
                 Row(
                     Modifier.fillMaxWidth().padding(top = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -283,6 +301,28 @@ fun ScreenKeyEditor(
                         modifier = Modifier.weight(1f),
                         onChange = onOpacity,
                     )
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KeySlider("Width", "${if (width > 0) width else size * 2}", (if (width > 0) width else size * 2).toFloat(), 24f, 280f, Modifier.weight(1f)) { onWidth(it.roundToInt()) }
+                    KeySlider("Height", "${if (height > 0) height else size}", (if (height > 0) height else size).toFloat(), 24f, 180f, Modifier.weight(1f)) { onHeight(it.roundToInt()) }
+                }
+                Text("APPEARANCE", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
+                val palette = listOf(0 to "Default", 0xFF1A9FFF.toInt() to "Blue", 0xFF3DDC84.toInt() to "Green", 0xFFFFA726.toInt() to "Amber", 0xFFFF5252.toInt() to "Red", 0xFFC77DFF.toInt() to "Violet", 0xFFFFFFFF.toInt() to "White")
+                listOf(
+                    Triple("Fill", fillColor, onFillColor),
+                    Triple("Border", borderColor, onBorderColor),
+                    Triple("Text", textColor, onTextColor),
+                ).forEach { (label, current, update) ->
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(42.dp))
+                        palette.forEach { (color, name) ->
+                            Chip(name, current == color, Modifier.weight(1f)) { update(color) }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KeySlider("Border", "${borderWidth.toInt()} dp", borderWidth, 0f, 12f, Modifier.weight(1f), onBorderWidth)
+                    KeySlider("Radius", if (cornerRadius < 0f) "Auto" else "${cornerRadius.toInt()} dp", if (cornerRadius < 0f) 16f else cornerRadius, 0f, 80f, Modifier.weight(1f)) { onCornerRadius(it) }
                 }
             }
         }

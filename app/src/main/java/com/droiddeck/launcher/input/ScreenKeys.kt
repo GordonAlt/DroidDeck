@@ -35,6 +35,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         var toggle = false
         var labels = true
         var action = ""
+        var width = 0
+        var height = 0
+        var fillColor = 0
+        var borderColor = 0
+        var textColor = 0
+        var borderWidth = 0f
+        var cornerRadius = -1f
+        var radialGroup = ""
+        var radialParent = false
+        var radialSlot = -1
         var armed = -1
         var cx = 0f
         var cy = 0f
@@ -66,6 +76,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private val addPress = Runnable { addX = pressX; addY = pressY; onAdd?.invoke() }
     private var editing = false
     private var selected: Entry? = null
+    private var activeRadialGroup: String? = null
     private var dragX = 0f
     private var dragY = 0f
     private var dragging = false
@@ -188,9 +199,40 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         save(); invalidate()
     }
 
+    /** Adds one expandable parent and eight independently configurable child slots. */
+    fun addRadialGroup(): ScreenKey? {
+        val group = "radial-${System.nanoTime()}"
+        val base = -41000 - (kotlin.math.abs(group.hashCode()) % 1000000) * 10
+        val parent = Entry(listOf(base)).also {
+            it.radialGroup = group
+            it.radialParent = true
+            it.text = "RADIAL"
+            it.x = 0.5f
+            it.y = 0.5f
+            it.size = 48
+        }
+        entries += parent
+        repeat(8) { slot ->
+            entries += Entry(listOf(base - slot - 1)).also {
+                it.radialGroup = group
+                it.radialSlot = slot
+                it.text = "${slot + 1}"
+                it.size = 42
+            }
+        }
+        if (width > 0 && height > 0) entries.forEach(::measure)
+        selected = parent
+        save()
+        invalidate()
+        return stateOf(parent.codes)
+    }
+
     fun remove(codes: List<Int>) {
         val entry = entries.firstOrNull { it.codes == codes } ?: return
-        entries.remove(entry)
+        if (entry.radialParent) {
+            if (activeRadialGroup == entry.radialGroup) activeRadialGroup = null
+            entries.removeAll { it.radialGroup == entry.radialGroup }
+        } else entries.remove(entry)
         if (selected === entry) selected = null
         save()
         invalidate()
@@ -216,6 +258,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.toggle = old.toggle
             it.labels = old.labels
             it.action = old.action
+            it.width = old.width
+            it.height = old.height
+            it.fillColor = old.fillColor
+            it.borderColor = old.borderColor
+            it.textColor = old.textColor
+            it.borderWidth = old.borderWidth
+            it.cornerRadius = old.cornerRadius
+            it.radialGroup = old.radialGroup
+            it.radialParent = old.radialParent
+            it.radialSlot = old.radialSlot
             it.directionBindings = when {
                 it.shape == SCREEN_KEY_STICK &&
                     GamepadTouchCodes.LEFT_ANALOG !in to && GamepadTouchCodes.RIGHT_ANALOG !in to -> when {
@@ -258,6 +310,22 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     fun resize(codes: List<Int>, size: Int) {
         val entry = entries.firstOrNull { it.codes == codes } ?: return
         entry.size = size.coerceIn(MIN_SIZE, MAX_SIZE)
+        measure(entry)
+        save()
+        invalidate()
+    }
+
+    fun setWidth(codes: List<Int>, value: Int) = updateEntry(codes) { it.width = value.coerceIn(0, 280) }
+    fun setHeight(codes: List<Int>, value: Int) = updateEntry(codes) { it.height = value.coerceIn(0, 180) }
+    fun setFillColor(codes: List<Int>, value: Int) = updateEntry(codes) { it.fillColor = value }
+    fun setBorderColor(codes: List<Int>, value: Int) = updateEntry(codes) { it.borderColor = value }
+    fun setTextColor(codes: List<Int>, value: Int) = updateEntry(codes) { it.textColor = value }
+    fun setBorderWidth(codes: List<Int>, value: Float) = updateEntry(codes) { it.borderWidth = value.coerceIn(0f, 12f) }
+    fun setCornerRadius(codes: List<Int>, value: Float) = updateEntry(codes) { it.cornerRadius = value.coerceIn(0f, 80f) }
+
+    private inline fun updateEntry(codes: List<Int>, change: (Entry) -> Unit) {
+        val entry = entries.firstOrNull { it.codes == codes } ?: return
+        change(entry)
         measure(entry)
         save()
         invalidate()
@@ -326,6 +394,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.toggle = entry.toggle
             it.labels = entry.labels
             it.action = entry.action
+            it.width = entry.width
+            it.height = entry.height
+            it.fillColor = entry.fillColor
+            it.borderColor = entry.borderColor
+            it.textColor = entry.textColor
+            it.borderWidth = entry.borderWidth
+            it.cornerRadius = entry.cornerRadius
+            it.radialGroup = entry.radialGroup
+            it.radialParent = entry.radialParent
+            it.radialSlot = entry.radialSlot
         }
         entries[entries.indexOf(entry)] = updated
         measure(updated)
@@ -353,7 +431,9 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private fun trimmed(codes: List<Int>): List<Int> = codes.dropLastWhile { it == 0 }.ifEmpty { listOf(0) }
 
     fun stateOf(codes: List<Int>): ScreenKey? = entries.firstOrNull { it.codes == codes }?.let {
-        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings)
+        ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings,
+            it.width, it.height, it.fillColor, it.borderColor, it.textColor, it.borderWidth, it.cornerRadius,
+            it.radialGroup, it.radialParent, it.radialSlot)
     }
 
     fun deselect() {
@@ -452,6 +532,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         it.toggle = key.toggle
         it.labels = key.labels
         it.action = key.action.ifEmpty { ScreenKeyActions.fromCode(key.codes.singleOrNull() ?: 0).orEmpty() }
+        it.width = key.width
+        it.height = key.height
+        it.fillColor = key.fillColor
+        it.borderColor = key.borderColor
+        it.textColor = key.textColor
+        it.borderWidth = key.borderWidth
+        it.cornerRadius = key.cornerRadius
+        it.radialGroup = key.radialGroup
+        it.radialParent = key.radialParent
+        it.radialSlot = key.radialSlot
         it.directionBindings = when {
             key.directionBindings.size == 8 -> key.directionBindings.map { group -> group.filter { code -> code > 0 }.distinct() }
             (key.shape == SCREEN_KEY_STICK || key.shape == SCREEN_KEY_DPAD) &&
@@ -479,9 +569,9 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun measure(entry: Entry) {
-        val h = dp(entry.size.toFloat())
+        val h = dp((entry.height.takeIf { it > 0 } ?: entry.size).toFloat())
         entry.halfH = h / 2f
-        entry.halfW = when {
+        val automaticWidth = when {
             entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || entry.action == ScreenKeyActions.MOUSE_REGION_RELATIVE -> h * 1.35f
             entry.shape == SCREEN_KEY_CIRCLE -> entry.halfH
             entry.shape == SCREEN_KEY_TRIGGER -> entry.halfH * 1.7f
@@ -493,8 +583,24 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 entry.halfH * (0.55f * chars + 1.05f).coerceIn(1.7f, 4.6f)
             }
         }
+        entry.halfW = if (entry.width > 0) dp(entry.width.toFloat()) / 2f else automaticWidth
         entry.cx = entry.x * width
         entry.cy = entry.y * height
+        if (entry.radialSlot in 0..7 && entry.radialGroup.isNotEmpty()) {
+            val parent = entries.firstOrNull { it.radialParent && it.radialGroup == entry.radialGroup }
+            if (parent != null && width > 0 && height > 0) {
+                val angle = Math.toRadians((entry.radialSlot * 45 - 90).toDouble())
+                val radius = maxOf(parent.halfW, parent.halfH) + maxOf(entry.halfW, entry.halfH) * 2.2f
+                entry.cx = (parent.cx + kotlin.math.cos(angle).toFloat() * radius).coerceIn(entry.halfW, width - entry.halfW)
+                entry.cy = (parent.cy + kotlin.math.sin(angle).toFloat() * radius).coerceIn(entry.halfH, height - entry.halfH)
+                entry.x = if (width > 0) entry.cx / width else entry.x
+                entry.y = if (height > 0) entry.cy / height else entry.y
+            }
+        }
+        if (entry.radialParent) {
+            entries.filter { it.radialGroup == entry.radialGroup && it.radialSlot in 0..7 }
+                .forEach(::measure)
+        }
     }
 
     private fun hasIcon(entry: Entry): Boolean =
@@ -547,16 +653,16 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         val engaged = entry.armed >= 0
         crossPath(entry, bodyPath, r, t)
         fillPaint.style = Paint.Style.FILL
-        fillPaint.color = tinted(color, if (entry.armed >= 0) 0.26f * alpha else 0.10f * alpha)
+        fillPaint.color = tinted(if (entry.fillColor != 0) entry.fillColor else color, if (entry.armed >= 0) 0.26f * alpha else 0.10f * alpha)
         canvas.drawPath(bodyPath, fillPaint)
         if (entry.armed >= 0) {
             armRect(entry, bodyPathRect, entry.armed, r, t)
-            fillPaint.color = tinted(color, 0.55f * alpha)
+            fillPaint.color = tinted(if (entry.fillColor != 0) entry.fillColor else color, 0.55f * alpha)
             canvas.drawRoundRect(bodyPathRect, t * 0.6f, t * 0.6f, fillPaint)
         }
         strokePaint.strokeJoin = Paint.Join.ROUND
-        strokePaint.strokeWidth = if (engaged) hairline * 1.6f else hairline
-        strokePaint.color = tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
+        strokePaint.strokeWidth = if (entry.borderWidth > 0f) dp(entry.borderWidth) else if (engaged) hairline * 1.6f else hairline
+        strokePaint.color = if (entry.borderColor != 0) tinted(entry.borderColor, alpha) else tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
         canvas.drawPath(bodyPath, strokePaint)
         textPaint.setShadowLayer(0f, 0f, 0f, 0)
         fillPaint.color = tinted(color, if (editing) 0.90f else 0.80f)
@@ -566,7 +672,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             val analog = GamepadTouchCodes.LEFT_ANALOG in entry.codes || GamepadTouchCodes.RIGHT_ANALOG in entry.codes
             val name = if (code == 0 || analog) "" else screenKeyLabel(context, listOf(code))
             if (entry.labels && name.isNotEmpty()) {
-                textPaint.color = if (on) Color.WHITE else tinted(color, alpha)
+                textPaint.color = if (on) Color.WHITE else if (entry.textColor != 0) tinted(entry.textColor, alpha) else tinted(color, alpha)
                 textPaint.textSize = dp(48f)
                 val fit = 48f * (t * 1.9f) / textPaint.measureText(name).coerceAtLeast(1f)
                 textPaint.textSize = minOf(fit, t * 1.7f).coerceIn(dp(8f), dp(60f))
@@ -574,7 +680,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 val ty = entry.cy + dir.second * (r - t * 0.6f)
                 canvas.drawText(name, tx, ty - (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)
             } else {
-                fillPaint.color = if (on) Color.WHITE else tinted(color, if (editing) 0.90f else 0.80f)
+                fillPaint.color = if (on) Color.WHITE else if (entry.textColor != 0) tinted(entry.textColor, alpha) else tinted(color, if (editing) 0.90f else 0.80f)
                 arrow(canvas, fillPaint, entry.cx, entry.cy, r - t * 0.55f, dir.first, dir.second, t * 0.8f)
             }
         }
@@ -642,18 +748,18 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         val radius = minOf(entry.halfW, entry.halfH)
         val hairline = maxOf(dp(1.2f), entry.halfH * 0.032f)
         fillPaint.style = Paint.Style.FILL
-        fillPaint.color = tinted(color, 0.14f * alpha)
+        fillPaint.color = tinted(if (entry.fillColor != 0) entry.fillColor else color, 0.14f * alpha)
         canvas.drawCircle(entry.cx, entry.cy, radius - hairline, fillPaint)
-        strokePaint.strokeWidth = if (engaged) hairline * 1.6f else hairline
-        strokePaint.color = tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
+        strokePaint.strokeWidth = if (entry.borderWidth > 0f) dp(entry.borderWidth) else if (engaged) hairline * 1.6f else hairline
+        strokePaint.color = if (entry.borderColor != 0) tinted(entry.borderColor, alpha) else tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
         canvas.drawCircle(entry.cx, entry.cy, radius - hairline / 2f, strokePaint)
         val dir = if (entry.stickX != 0f || entry.stickY != 0f) entry.stickX to entry.stickY
             else if (engaged) STICK_DIRS[entry.armed.coerceIn(0, 7)] else 0f to 0f
         val knob = radius * 0.36f
-        fillPaint.color = tinted(color, if (engaged) 0.55f * alpha else 0.24f * alpha)
+        fillPaint.color = tinted(if (entry.fillColor != 0) entry.fillColor else color, if (engaged) 0.55f * alpha else 0.24f * alpha)
         canvas.drawCircle(entry.cx + dir.first * radius * 0.40f, entry.cy + dir.second * radius * 0.40f, knob, fillPaint)
-        strokePaint.strokeWidth = hairline
-        strokePaint.color = tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
+        strokePaint.strokeWidth = if (entry.borderWidth > 0f) dp(entry.borderWidth) else hairline
+        strokePaint.color = if (entry.borderColor != 0) tinted(entry.borderColor, alpha) else tinted(color, (if (editing) 0.90f else 0.80f) * alpha)
         canvas.drawCircle(entry.cx + dir.first * radius * 0.40f, entry.cy + dir.second * radius * 0.40f, knob, strokePaint)
         textPaint.setShadowLayer(0f, 0f, 0f, 0)
         STICK_DIRS.forEachIndexed { index, unit ->
@@ -664,7 +770,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 GamepadTouchCodes.label(code) ?: pcKeyLabel(context, code)
             }
             if (entry.labels && name.isNotEmpty()) {
-                textPaint.color = if (on) Color.WHITE else tinted(color, 0.85f * alpha)
+                textPaint.color = if (on) Color.WHITE else if (entry.textColor != 0) tinted(entry.textColor, alpha) else tinted(color, 0.85f * alpha)
                 textPaint.textSize = dp(48f)
                 val fit = 48f * (radius * 0.34f) / textPaint.measureText(name).coerceAtLeast(1f)
                 textPaint.textSize = minOf(fit, radius * 0.22f).coerceAtLeast(dp(6f))
@@ -705,7 +811,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         return (index + 8) % 8
     }
 
-    private fun radiusOf(entry: Entry): Float = when (entry.shape) {
+    private fun radiusOf(entry: Entry): Float = if (entry.cornerRadius >= 0f) dp(entry.cornerRadius) else when (entry.shape) {
         SCREEN_KEY_ROUND -> entry.halfH * 0.30f
         SCREEN_KEY_RECT -> entry.halfH * 0.12f
         SCREEN_KEY_TRIGGER -> entry.halfH * 0.45f
@@ -716,6 +822,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     fun takesTouchAt(x: Float, y: Float): Boolean = editing || entryAt(x, y) != null
 
     private fun entryAt(x: Float, y: Float): Entry? = entries.lastOrNull { entry ->
+        (editing || entry.radialSlot !in 0..7 || activeRadialGroup == entry.radialGroup) &&
         x >= entry.cx - entry.halfW && x <= entry.cx + entry.halfW && y >= entry.cy - entry.halfH && y <= entry.cy + entry.halfH
     }
 
@@ -727,7 +834,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
 
     override fun onDraw(canvas: Canvas) {
         if (editing) drawGrid(canvas)
-        entries.forEach { draw(canvas, it) }
+        entries.filter { editing || it.radialSlot !in 0..7 || activeRadialGroup == it.radialGroup }.forEach { draw(canvas, it) }
         if (editing) {
             drawGuides(canvas)
             drawToolbar(canvas)
@@ -772,7 +879,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             drawStick(canvas, entry)
             return
         }
-        val style = if (followSteam) steamStyle() else null
+        val style = if (followSteam && entry.fillColor == 0 && entry.borderColor == 0 && entry.textColor == 0) steamStyle() else null
         val engaged = down.values.any { it === entry } || mouseDown.values.any { it === entry } || latched.contains(entry)
         val bitmap = bitmapFor(entry)
         val icon = bitmap == null && hasIcon(entry)
@@ -805,7 +912,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         } else {
             fillPaint.style = Paint.Style.FILL
             if (!frameless) {
-                fillPaint.color = tinted(BODY, 0.60f * alpha)
+                fillPaint.color = tinted(if (entry.fillColor != 0) entry.fillColor else BODY, 0.60f * alpha)
                 canvas.drawRoundRect(rect, radius, radius, fillPaint)
             }
             if (engaged) {
@@ -813,14 +920,14 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 canvas.drawRoundRect(rect, radius, radius, fillPaint)
             }
             if (!frameless) {
-                strokePaint.strokeWidth = if (engaged) hairline * 1.6f else hairline
-                strokePaint.color = tinted(
+                strokePaint.strokeWidth = if (entry.borderWidth > 0f) dp(entry.borderWidth) else if (engaged) hairline * 1.6f else hairline
+                strokePaint.color = if (entry.borderColor != 0) tinted(entry.borderColor, alpha) else tinted(
                     accent().first,
                     (if (engaged) 0.96f else if (editing) 0.80f else 0.68f) * alpha,
                 )
                 body(canvas, entry, radius, strokePaint)
             }
-            inkColor = if (engaged) Color.WHITE else tinted(accent().first, alpha)
+            inkColor = if (entry.textColor != 0) tinted(entry.textColor, alpha) else if (engaged) Color.WHITE else tinted(accent().first, alpha)
         }
         if (editing && selected === entry) {
             ringPaint.strokeWidth = hairline * 0.8f
@@ -926,6 +1033,11 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     return true
                 }
                 if (forwardedPointerBits != 0) forwardPointers(event, forwardedPointerBits)
+                if (entry.radialParent) {
+                    activeRadialGroup = if (activeRadialGroup == entry.radialGroup) null else entry.radialGroup
+                    invalidate()
+                    return true
+                }
                 if (entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || entry.action == ScreenKeyActions.MOUSE_REGION_RELATIVE) {
                     val pid = event.getPointerId(index)
                     val px = event.getX(index); val py = event.getY(index)
@@ -1191,6 +1303,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 entry.cy = nextY
                 entry.x = entry.cx / width
                 entry.y = entry.cy / height
+                if (entry.radialParent) entries.filter { it.radialGroup == entry.radialGroup && it.radialSlot in 0..7 }.forEach(::measure)
                 invalidate()
                 return true
             }
@@ -1220,6 +1333,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun pressEntry(entry: Entry) {
+        if (entry.radialSlot in 0..7 && entry.codes.all { it <= -41000 }) return
         when (entry.action) {
             ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
                 val button = mouseButtonCode(entry.action)
@@ -1236,6 +1350,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun releaseEntry(entry: Entry) {
+        if (entry.radialSlot in 0..7 && entry.codes.all { it <= -41000 }) return
         when (entry.action) {
             ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
                 val button = mouseButtonCode(entry.action)
@@ -1296,7 +1411,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     fun export(): String = ControllerPrefs.encodeScreenKeys(
-        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings) },
+        entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings,
+            it.width, it.height, it.fillColor, it.borderColor, it.textColor, it.borderWidth, it.cornerRadius, it.radialGroup, it.radialParent, it.radialSlot) },
     )
 
     fun load(raw: String) {
@@ -1312,7 +1428,8 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     private fun save() {
         ControllerPrefs.setScreenKeys(
             context,
-            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings) },
+            entries.map { ScreenKey(it.codes, it.x, it.y, it.size, it.glyph, it.text, it.image, it.opacity, it.shape, it.toggle, it.labels, it.action, it.directionBindings,
+                it.width, it.height, it.fillColor, it.borderColor, it.textColor, it.borderWidth, it.cornerRadius, it.radialGroup, it.radialParent, it.radialSlot) },
             profile,
         )
     }

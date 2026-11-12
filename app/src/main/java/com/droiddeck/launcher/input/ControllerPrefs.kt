@@ -19,20 +19,26 @@ object ControllerPrefs {
     )
 
     val opacities = listOf(40, 60, 80, 100)
-
     val sizes = listOf(80, 90, 100, 110, 125)
 
     val mappable = listOf(
-        "a" to R.string.ctrl_button_a, "b" to R.string.ctrl_button_b, "x" to R.string.ctrl_button_x, "y" to R.string.ctrl_button_y,
-        "lb" to R.string.ctrl_button_lb, "rb" to R.string.ctrl_button_rb, "lt" to R.string.ctrl_button_lt, "rt" to R.string.ctrl_button_rt,
+        "a" to R.string.ctrl_button_a, "b" to R.string.ctrl_button_b,
+        "x" to R.string.ctrl_button_x, "y" to R.string.ctrl_button_y,
+        "lb" to R.string.ctrl_button_lb, "rb" to R.string.ctrl_button_rb,
+        "lt" to R.string.ctrl_button_lt, "rt" to R.string.ctrl_button_rt,
         "select" to R.string.ctrl_button_view, "start" to R.string.ctrl_button_menu,
     )
 
     val targets = listOf(
-        "a" to R.string.ctrl_target_a, "b" to R.string.ctrl_target_b, "x" to R.string.ctrl_target_x, "y" to R.string.ctrl_target_y,
-        "lb" to R.string.ctrl_target_lb, "rb" to R.string.ctrl_target_rb, "lt" to R.string.ctrl_target_lt, "rt" to R.string.ctrl_target_rt,
-        "l3" to R.string.ctrl_target_l3, "r3" to R.string.ctrl_target_r3, "select" to R.string.ctrl_target_view, "start" to R.string.ctrl_target_menu, "guide" to R.string.ctrl_target_steam,
-        "up" to R.string.ctrl_target_up, "down" to R.string.ctrl_target_down, "left" to R.string.ctrl_target_left, "right" to R.string.ctrl_target_right,
+        "a" to R.string.ctrl_target_a, "b" to R.string.ctrl_target_b,
+        "x" to R.string.ctrl_target_x, "y" to R.string.ctrl_target_y,
+        "lb" to R.string.ctrl_target_lb, "rb" to R.string.ctrl_target_rb,
+        "lt" to R.string.ctrl_target_lt, "rt" to R.string.ctrl_target_rt,
+        "l3" to R.string.ctrl_target_l3, "r3" to R.string.ctrl_target_r3,
+        "select" to R.string.ctrl_target_view, "start" to R.string.ctrl_target_menu,
+        "guide" to R.string.ctrl_target_steam,
+        "up" to R.string.ctrl_target_up, "down" to R.string.ctrl_target_down,
+        "left" to R.string.ctrl_target_left, "right" to R.string.ctrl_target_right,
         OFF to R.string.ctrl_target_hidden,
     )
 
@@ -53,7 +59,8 @@ object ControllerPrefs {
         val mapping: Map<String, String>,
     )
 
-    internal fun prefs(context: Context) = context.getSharedPreferences("controller", Context.MODE_PRIVATE)
+    internal fun prefs(context: Context) =
+        context.getSharedPreferences("controller", Context.MODE_PRIVATE)
 
     fun read(context: Context): Settings {
         val p = prefs(context)
@@ -76,7 +83,8 @@ object ControllerPrefs {
     }
 
     fun target(context: Context, id: String): String =
-        prefs(context).getString("map.$id", id)?.takeIf { t -> targets.any { it.first == t } } ?: id
+        prefs(context).getString("map.$id", id)
+            ?.takeIf { t -> targets.any { it.first == t } } ?: id
 
     fun setTarget(context: Context, id: String, target: String) {
         prefs(context).edit().putString("map.$id", target).apply()
@@ -84,7 +92,9 @@ object ControllerPrefs {
 
     fun resetMapping(context: Context) {
         val p = prefs(context)
-        p.edit().apply { p.all.keys.filter { it.startsWith("map.") }.forEach { remove(it) } }.apply()
+        p.edit().apply {
+            p.all.keys.filter { it.startsWith("map.") }.forEach { remove(it) }
+        }.apply()
     }
 
     fun setTint(context: Context, tint: Int) {
@@ -107,7 +117,8 @@ object ControllerPrefs {
         prefs(context).edit().putBoolean("adaptiveSticks", on).apply()
     }
 
-    fun rumbleEnabled(context: Context): Boolean = prefs(context).getBoolean("rumble", true)
+    fun rumbleEnabled(context: Context): Boolean =
+        prefs(context).getBoolean("rumble", true)
 
     fun setRumble(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("rumble", on).apply()
@@ -129,7 +140,8 @@ object ControllerPrefs {
         prefs(context).edit().putBoolean("selectSteam", on).apply()
     }
 
-    fun joyConVr(context: Context): Boolean = prefs(context).getBoolean("joyConVr", true)
+    fun joyConVr(context: Context): Boolean =
+        prefs(context).getBoolean("joyConVr", true)
 
     fun setJoyConVr(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("joyConVr", on).apply()
@@ -140,16 +152,26 @@ object ControllerPrefs {
     }
 
     fun layout(context: Context, width: Int, height: Int): Map<String, Pair<Float, Float>> {
-        val raw = prefs(context).getString("layout.${width}x$height", null) ?: return emptyMap()
+        val raw = prefs(context).getString("layout.${width}x$height", null)
+            ?: return emptyMap()
         return raw.split(';').mapNotNull { entry ->
-            val (group, pos) = entry.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
-            val (x, y) = pos.split(',').mapNotNull { it.toFloatOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
+            val (group, pos) = entry.split(':').takeIf { it.size == 2 }
+                ?: return@mapNotNull null
+            val (x, y) = pos.split(',').mapNotNull { it.toFloatOrNull() }
+                .takeIf { it.size == 2 } ?: return@mapNotNull null
             group to (x to y)
         }.toMap()
     }
 
-    fun setLayout(context: Context, width: Int, height: Int, positions: Map<String, Pair<Float, Float>>) {
-        val raw = positions.entries.joinToString(";") { (group, pos) -> "$group:${pos.first},${pos.second}" }
+    fun setLayout(
+        context: Context,
+        width: Int,
+        height: Int,
+        positions: Map<String, Pair<Float, Float>>,
+    ) {
+        val raw = positions.entries.joinToString(";") { (group, pos) ->
+            "$group:${pos.first},${pos.second}"
+        }
         prefs(context).edit().putString("layout.${width}x$height", raw).apply()
     }
 
@@ -157,7 +179,8 @@ object ControllerPrefs {
         prefs(context).edit().remove("layout.${width}x$height").apply()
     }
 
-    fun screenKeysShown(context: Context): Boolean = prefs(context).getBoolean("screenKeysShown", true)
+    fun screenKeysShown(context: Context): Boolean =
+        prefs(context).getBoolean("screenKeysShown", true)
 
     fun setScreenKeysShown(context: Context, shown: Boolean) {
         prefs(context).edit().putBoolean("screenKeysShown", shown).apply()
@@ -165,7 +188,8 @@ object ControllerPrefs {
 
     fun screenKeys(context: Context, profile: String? = null): List<ScreenKey> {
         val p = prefs(context)
-        val raw = profile?.let { p.getString("screenKeys.$it", null) } ?: p.getString("screenKeys", null)
+        val raw = profile?.let { p.getString("screenKeys.$it", null) }
+            ?: p.getString("screenKeys", null)
         return decodeScreenKeys(raw.orEmpty())
     }
 
@@ -175,44 +199,78 @@ object ControllerPrefs {
     }
 
     private fun encodeDirectionBindings(bindings: List<List<Int>>): String =
-        if (bindings.size == 8) bindings.joinToString(".") { group ->
-            group.filter { it > 0 }.distinct().joinToString("+").ifEmpty { "0" }
+        if (bindings.size == 8) {
+            bindings.joinToString(".") { group ->
+                group.filter { it > 0 }.distinct().joinToString("+").ifEmpty { "0" }
+            }
         } else ""
 
     private fun decodeDirectionBindings(raw: String?): List<List<Int>> {
         val groups = raw?.split('.') ?: return emptyList()
         if (groups.size != 8) return emptyList()
         return groups.map { group ->
-            group.split('+').mapNotNull { it.toIntOrNull()?.takeIf { code -> code > 0 } }.distinct()
+            group.split('+')
+                .mapNotNull { it.toIntOrNull()?.takeIf { code -> code > 0 } }
+                .distinct()
         }
     }
 
     fun encodeScreenKeys(keys: List<ScreenKey>): String = keys.joinToString(";") {
-        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:${if (it.labels) 1 else 0}:${escape(it.action)}:${encodeDirectionBindings(it.directionBindings)}"
+        "${it.codes.joinToString("+")}:${it.x},${it.y},${it.size}:" +
+            "${escape(it.glyph)}:${escape(it.text)}:${escape(it.image)}:" +
+            "${it.opacity}:${it.shape}:${if (it.toggle) 1 else 0}:" +
+            "${if (it.labels) 1 else 0}:${escape(it.action)}:" +
+            "${encodeDirectionBindings(it.directionBindings)}:" +
+            "${it.width}:${it.height}:${it.fillColor}:${it.borderColor}:" +
+            "${it.textColor}:${it.borderWidth}:${it.cornerRadius}:" +
+            "${escape(it.radialGroup)}:${if (it.radialParent) 1 else 0}:${it.radialSlot}"
     }
 
-    fun decodeScreenKeys(raw: String): List<ScreenKey> = raw.split(';').mapNotNull { entry ->
-        val parts = entry.split(':')
-        if (parts.size < 2) return@mapNotNull null
-        val keys = parts[0].split('+').mapNotNull { it.toIntOrNull() }.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        val nums = parts[1].split(',').mapNotNull { it.toFloatOrNull() }.takeIf { it.size == 3 } ?: return@mapNotNull null
-        ScreenKey(
-            keys, nums[0], nums[1], nums[2].toInt(),
-            parts.getOrNull(2)?.let(::unescape).orEmpty(),
-            parts.getOrNull(3)?.let(::unescape).orEmpty(),
-            parts.getOrNull(4)?.let(::unescape).orEmpty(),
-            parts.getOrNull(5)?.toFloatOrNull()?.coerceIn(0.2f, 1f) ?: 1f,
-            parts.getOrNull(6)?.toIntOrNull()?.coerceIn(SCREEN_KEY_PILL, SCREEN_KEY_STICK) ?: SCREEN_KEY_PILL,
-            parts.getOrNull(7) == "1",
-            parts.getOrNull(8) != "0",
-            parts.getOrNull(9)?.let(::unescape).orEmpty(),
-            decodeDirectionBindings(parts.getOrNull(10)),
-        )
-    }
+    fun decodeScreenKeys(raw: String): List<ScreenKey> =
+        raw.split(';').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size < 2) return@mapNotNull null
+
+            val keys = parts[0].split('+')
+                .mapNotNull { it.toIntOrNull() }
+                .takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+
+            val nums = parts[1].split(',')
+                .mapNotNull { it.toFloatOrNull() }
+                .takeIf { it.size == 3 } ?: return@mapNotNull null
+
+            ScreenKey(
+                keys, nums[0], nums[1], nums[2].toInt(),
+                parts.getOrNull(2)?.let(::unescape).orEmpty(),
+                parts.getOrNull(3)?.let(::unescape).orEmpty(),
+                parts.getOrNull(4)?.let(::unescape).orEmpty(),
+                parts.getOrNull(5)?.toFloatOrNull()?.coerceIn(0.2f, 1f) ?: 1f,
+                parts.getOrNull(6)?.toIntOrNull()
+                    ?.coerceIn(SCREEN_KEY_PILL, SCREEN_KEY_STICK) ?: SCREEN_KEY_PILL,
+                parts.getOrNull(7) == "1",
+                parts.getOrNull(8) != "0",
+                parts.getOrNull(9)?.let(::unescape).orEmpty(),
+                decodeDirectionBindings(parts.getOrNull(10)),
+                parts.getOrNull(11)?.toIntOrNull() ?: 0,
+                parts.getOrNull(12)?.toIntOrNull() ?: 0,
+                parts.getOrNull(13)?.toIntOrNull() ?: 0,
+                parts.getOrNull(14)?.toIntOrNull() ?: 0,
+                parts.getOrNull(15)?.toIntOrNull() ?: 0,
+                parts.getOrNull(16)?.toFloatOrNull()?.coerceAtLeast(0f) ?: 0f,
+                parts.getOrNull(17)?.toFloatOrNull() ?: -1f,
+                parts.getOrNull(18)?.let(::unescape).orEmpty(),
+                parts.getOrNull(19) == "1",
+                parts.getOrNull(20)?.toIntOrNull() ?: -1,
+            )
+        }
 
     fun screenLayouts(context: Context): Map<String, String> =
         prefs(context).all.mapNotNull { (key, value) ->
-            if (!key.startsWith("screenLayout.") || value !is String) null else key.removePrefix("screenLayout.") to value
+            if (!key.startsWith("screenLayout.") || value !is String) {
+                null
+            } else {
+                key.removePrefix("screenLayout.") to value
+            }
         }.toMap()
 
     fun saveScreenLayout(context: Context, name: String, raw: String) {
@@ -223,9 +281,17 @@ object ControllerPrefs {
         prefs(context).edit().remove("screenLayout.$name").apply()
     }
 
-    private fun escape(value: String) = value.replace("%", "%25").replace(";", "%3B").replace(":", "%3A").replace(",", "%2C")
+    private fun escape(value: String) =
+        value.replace("%", "%25")
+            .replace(";", "%3B")
+            .replace(":", "%3A")
+            .replace(",", "%2C")
 
-    private fun unescape(value: String) = value.replace("%2C", ",").replace("%3A", ":").replace("%3B", ";").replace("%25", "%")
+    private fun unescape(value: String) =
+        value.replace("%2C", ",")
+            .replace("%3A", ":")
+            .replace("%3B", ";")
+            .replace("%25", "%")
 
     fun resetAll(context: Context) {
         prefs(context).edit().clear().putBoolean("rumble", true).apply()
@@ -233,6 +299,8 @@ object ControllerPrefs {
 
     fun resetAllLayouts(context: Context) {
         val p = prefs(context)
-        p.edit().apply { p.all.keys.filter { it.startsWith("layout.") }.forEach { remove(it) } }.apply()
+        p.edit().apply {
+            p.all.keys.filter { it.startsWith("layout.") }.forEach { remove(it) }
+        }.apply()
     }
 }

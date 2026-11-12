@@ -31,6 +31,7 @@ class ControllerActions(
     val onSelectSteam: (Boolean) -> Unit,
     val onJoyConVr: (Boolean) -> Unit,
     val onEditLayout: () -> Unit,
+    val onEditScreenKeys: () -> Unit,
     val onResetLayout: () -> Unit,
     val onMapping: () -> Unit,
     val onResetAll: () -> Unit,
@@ -80,6 +81,7 @@ fun ColumnScope.ControllerRows(host: MenuHost, oscMode: String, c: ControllerPre
             SecondaryButton(stringResource(R.string.ctrl_reset), enabled = c.customLayout) { a.onResetLayout() }
         }
     }
+    ActionRow(stringResource(R.string.ctrl_edit_touch_layout), stringResource(R.string.ctrl_edit_touch_layout_hint), stringResource(R.string.ctrl_edit), a.onEditScreenKeys)
     val remapped = c.mapping.count { (id, target) -> id != target }
     ActionRow(stringResource(R.string.ctrl_mapping), if (remapped == 0) stringResource(R.string.ctrl_mapping_default) else stringResource(R.string.ctrl_mapping_count, remapped, c.mapping.size), stringResource(R.string.ctrl_configure), a.onMapping)
     ActionRow(stringResource(R.string.ctrl_reset_all), stringResource(R.string.ctrl_reset_all_hint), stringResource(R.string.ctrl_reset), a.onResetAll)
