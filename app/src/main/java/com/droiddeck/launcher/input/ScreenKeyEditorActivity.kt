@@ -80,16 +80,20 @@ class ScreenKeyEditorActivity : ComponentActivity() {
                                     direction = null
                                 },
                                 onAddAction = { action ->
-                                    val code = ScreenKeyActions.code(action)
-                                    if (code != null) {
+                                    val target = selected
+                                    if (binding && target != null && direction == null) {
+                                        keys.setAction(target.codes, action)
+                                        selected = keys.stateOf(target.codes)
+                                    } else {
                                         keys.addAction(action)
-                                        selected = keys.stateOf(listOf(code))
+                                        val code = ScreenKeyActions.code(action)
+                                        selected = code?.let { keys.stateOf(listOf(it)) }
                                     }
                                     pickerOpen = false
                                     binding = false
                                     direction = null
                                 },
-                                allowActions = !binding,
+                                allowActions = direction == null,
                                 allowEmpty = direction != null,
                             )
                         }

@@ -195,7 +195,7 @@ fun ScreenKeyEditor(
                             )
                         }
                     }
-                    if (button && action.isEmpty()) {
+                    if (button) {
                         IconButton(onClick = onBind, modifier = Modifier.width(38.dp).focusGlide(CircleShape)) {
                             Icon(
                                 Icons.Default.Keyboard, stringResource(R.string.screen_key_bind),

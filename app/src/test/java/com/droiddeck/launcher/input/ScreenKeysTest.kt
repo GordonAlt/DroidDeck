@@ -147,6 +147,41 @@ class ScreenKeysTest {
         assertEquals(listOf(KeyEvent.KEYCODE_SHIFT_LEFT to true, KeyEvent.KEYCODE_SHIFT_LEFT to false), sent)
     }
 
+    @Test fun radialWheelSlotsAcceptActionsAndDismissAfterSelection() {
+        val mouseEvents = mutableListOf<Pair<Int, Boolean>>()
+        val keys = ScreenKeys(context, { _, _ -> }).apply {
+            onMouseButton = { button, pressed -> mouseEvents += button to pressed }
+        }
+        keys.layout(0, 0, 1000, 600)
+
+        val parent = keys.addRadialGroup()!!
+        val initial = ControllerPrefs.decodeScreenKeys(keys.export())
+        assertEquals(9, initial.size)
+        val firstSlot = initial.single { it.radialSlot == 0 }
+
+        assertTrue(keys.setAction(firstSlot.codes, ScreenKeyActions.MOUSE_LEFT) != null)
+        val configured = ControllerPrefs.decodeScreenKeys(keys.export()).single { it.radialSlot == 0 }
+        assertEquals(ScreenKeyActions.MOUSE_LEFT, configured.action)
+        assertEquals(ScreenKeyActions.label(ScreenKeyActions.MOUSE_LEFT), configured.text)
+
+        send(keys, MotionEvent.ACTION_DOWN, listOf(0), listOf(parent.x * 1000f), listOf(parent.y * 600f))
+        send(keys, MotionEvent.ACTION_UP, listOf(0), listOf(parent.x * 1000f), listOf(parent.y * 600f))
+        val childX = configured.x * 1000f
+        val childY = configured.y * 600f
+        assertTrue(keys.takesTouchAt(childX, childY))
+
+        send(keys, MotionEvent.ACTION_DOWN, listOf(0), listOf(childX), listOf(childY))
+        assertEquals(listOf(0x110 to true), mouseEvents)
+        send(keys, MotionEvent.ACTION_UP, listOf(0), listOf(childX), listOf(childY))
+        assertEquals(listOf(0x110 to true, 0x110 to false), mouseEvents)
+        assertFalse(keys.takesTouchAt(childX, childY))
+
+        val rebound = keys.setCodes(firstSlot.codes, listOf(KeyEvent.KEYCODE_A))!!
+        assertEquals("", rebound.action)
+        assertEquals("", rebound.text)
+        assertEquals(listOf(KeyEvent.KEYCODE_A), rebound.codes)
+    }
+
     private fun send(view: View, action: Int, ids: List<Int>, xs: List<Float>, ys: List<Float>) {
         val properties = Array(ids.size) { index ->
             MotionEvent.PointerProperties().apply {

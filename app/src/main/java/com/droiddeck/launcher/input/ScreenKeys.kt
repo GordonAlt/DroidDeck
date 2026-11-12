@@ -246,7 +246,11 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         if (to != from && entries.any { it !== old && it.codes == to }) return null
         val fresh = Entry(to).also {
             it.glyph = old.glyph
-            it.text = old.text
+            it.text = when {
+                old.radialSlot in 0..7 && old.text == "${old.radialSlot + 1}" -> ""
+                old.action.isNotEmpty() && old.text == ScreenKeyActions.label(old.action) -> ""
+                else -> old.text
+            }
             it.image = old.image
             it.bitmap = old.bitmap
             it.bitmapFor = old.bitmapFor
@@ -257,7 +261,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             it.shape = if (GamepadTouchCodes.LEFT_ANALOG in to || GamepadTouchCodes.RIGHT_ANALOG in to) SCREEN_KEY_STICK else old.shape
             it.toggle = old.toggle
             it.labels = old.labels
-            it.action = old.action
+            it.action = if (to.all { code -> code > 0 }) "" else old.action
             it.width = old.width
             it.height = old.height
             it.fillColor = old.fillColor
@@ -293,6 +297,30 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
         measure(entry)
         save()
         invalidate()
+    }
+
+    /** Assigns a mouse/semantic action to an existing control, including a radial child slot. */
+    fun setAction(codes: List<Int>, action: String): ScreenKey? {
+        if (ScreenKeyActions.code(action) == null) return null
+        val entry = entries.firstOrNull { it.codes == codes } ?: return null
+        val previousLabel = entry.action.takeIf { it.isNotEmpty() }?.let { ScreenKeyActions.label(it) }.orEmpty()
+        if (entry.text.isEmpty() || entry.text == previousLabel ||
+            (entry.radialSlot in 0..7 && entry.text == "${entry.radialSlot + 1}")
+        ) {
+            entry.text = ScreenKeyActions.label(action)
+        }
+        entry.action = action
+        entry.toggle = false
+        if (action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE ||
+            action == ScreenKeyActions.MOUSE_REGION_RELATIVE
+        ) {
+            entry.shape = SCREEN_KEY_RECT
+            if (entry.size < 80) entry.size = 120
+        }
+        measure(entry)
+        save()
+        invalidate()
+        return stateOf(entry.codes)
     }
 
     fun setImage(codes: List<Int>, image: String) {
@@ -1027,7 +1055,13 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                 val index = event.actionIndex
                 val entry = entryAt(event.getX(index), event.getY(index))
                 if (entry == null) {
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) return false
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        if (activeRadialGroup != null) {
+                            activeRadialGroup = null
+                            invalidate()
+                        }
+                        return false
+                    }
                     forwardedPointerBits = forwardedPointerBits or (1 shl event.getPointerId(index))
                     forwardPointers(event, forwardedPointerBits)
                     return true
@@ -1037,6 +1071,11 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
                     activeRadialGroup = if (activeRadialGroup == entry.radialGroup) null else entry.radialGroup
                     invalidate()
                     return true
+                }
+                // Selecting any child or another control dismisses the currently open wheel.
+                if (activeRadialGroup != null) {
+                    activeRadialGroup = null
+                    invalidate()
                 }
                 if (entry.action == ScreenKeyActions.MOUSE_REGION_ABSOLUTE || entry.action == ScreenKeyActions.MOUSE_REGION_RELATIVE) {
                     val pid = event.getPointerId(index)
@@ -1333,7 +1372,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun pressEntry(entry: Entry) {
-        if (entry.radialSlot in 0..7 && entry.codes.all { it <= -41000 }) return
+        if (entry.radialSlot in 0..7 && entry.action.isEmpty() && entry.codes.all { it <= -41000 }) return
         when (entry.action) {
             ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
                 val button = mouseButtonCode(entry.action)
@@ -1350,7 +1389,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     }
 
     private fun releaseEntry(entry: Entry) {
-        if (entry.radialSlot in 0..7 && entry.codes.all { it <= -41000 }) return
+        if (entry.radialSlot in 0..7 && entry.action.isEmpty() && entry.codes.all { it <= -41000 }) return
         when (entry.action) {
             ScreenKeyActions.MOUSE_LEFT, ScreenKeyActions.MOUSE_RIGHT, ScreenKeyActions.MOUSE_MIDDLE -> {
                 val button = mouseButtonCode(entry.action)
