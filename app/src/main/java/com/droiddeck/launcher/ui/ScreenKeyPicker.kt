@@ -3,6 +3,9 @@ package com.droiddeck.launcher.ui
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +26,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +57,8 @@ import com.droiddeck.launcher.input.pcKeyLabel
 import com.droiddeck.launcher.input.GamepadTouchCodes
 import com.droiddeck.launcher.input.ScreenKeyActions
 
+private enum class DroidDeckPickerTab { KEYBOARD, GAMEPAD, MOUSE }
+
 @Composable
 fun ScreenKeyPicker(
     onDismiss: () -> Unit,
@@ -65,6 +72,9 @@ fun ScreenKeyPicker(
     allowEmpty: Boolean = false,
 ) {
     var picked by remember { mutableStateOf(initial) }
+    val context = LocalContext.current
+    var pickerTab by remember { mutableStateOf(DroidDeckPickerTab.KEYBOARD) }
+    var pickerQuery by remember { mutableStateOf("") }
     val p = LocalPalette.current
     val toggle: (Int) -> Unit = { code ->
         picked = if (sequence) {
@@ -86,10 +96,67 @@ fun ScreenKeyPicker(
                 Modifier.widthIn(max = 820.dp).fillMaxWidth().fillMaxHeight(), shape = RoundedCornerShape(20.dp),
                 color = p.background, contentColor = p.onBackground, border = BorderStroke(1.dp, p.line2),
             ) {
-                Column {
+                Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.screen_keys_add), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         IconButton(onClick = onDismiss, modifier = Modifier.focusGlide(CircleShape)) { Icon(Icons.Default.Close, null) }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            DroidDeckPickerTab.KEYBOARD to "Keyboard",
+                            DroidDeckPickerTab.GAMEPAD to "Gamepad",
+                            DroidDeckPickerTab.MOUSE to "Mouse",
+                        ).forEach { (tab, title) ->
+                            val selected = pickerTab == tab
+                            Surface(
+                                Modifier.weight(1f).height(36.dp).clickable {
+                                    pickerTab = tab
+                                    pickerQuery = ""
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selected) p.primary.copy(alpha = 0.17f) else p.line2.copy(alpha = 0.18f),
+                                border = BorderStroke(1.dp, if (selected) p.primary else p.line2),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        title,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (selected) p.primary else p.onBackground.copy(alpha = 0.72f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(40.dp)
+                            .background(p.line2.copy(alpha = 0.20f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = p.onBackground.copy(alpha = 0.5f))
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (pickerQuery.isEmpty()) {
+                                Text("Search controls", color = p.onBackground.copy(alpha = 0.42f), style = MaterialTheme.typography.bodySmall)
+                            }
+                            BasicTextField(
+                                value = pickerQuery,
+                                onValueChange = { pickerQuery = it.take(40) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(color = p.onBackground),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(p.primary),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (pickerQuery.isNotEmpty()) {
+                            IconButton(onClick = { pickerQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            }
+                        }
                     }
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 26.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -121,7 +188,7 @@ fun ScreenKeyPicker(
                             }
                         }
                     }
-                    if (allowActions) {
+                    if (allowActions && pickerTab == DroidDeckPickerTab.MOUSE) {
                     Text("MOUSE CONTROLS", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = p.onBackground.copy(alpha = 0.65f))
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
@@ -131,19 +198,20 @@ fun ScreenKeyPicker(
                             ScreenKeyActions.SCROLL_UP to "Scroll up once", ScreenKeyActions.SCROLL_DOWN to "Scroll down once",
                             ScreenKeyActions.SCROLL_UP_CONTINUOUS to "Scroll up while held",
                             ScreenKeyActions.SCROLL_DOWN_CONTINUOUS to "Scroll down while held",
-                        ).forEach { (action, title) ->
+                        ).filter { it.second.contains(pickerQuery, ignoreCase = true) }.forEach { (action, title) ->
                             Surface(shape = RoundedCornerShape(8.dp), color = p.surface, border = BorderStroke(1.dp, p.line), modifier = Modifier.height(34.dp).clickable { onAddAction(action) }) {
                                 Box(Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { Text(title, style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                             }
                         }
                     }
                     }
+                    if (pickerTab == DroidDeckPickerTab.GAMEPAD) {
                     Text("GAMEPAD", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = p.onBackground.copy(alpha = 0.65f))
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 5.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        (GamepadTouchCodes.buttons + GamepadTouchCodes.dpad + listOf(GamepadTouchCodes.LEFT_ANALOG, GamepadTouchCodes.RIGHT_ANALOG) + GamepadTouchCodes.leftStick + GamepadTouchCodes.rightStick).forEach { code ->
+                        (GamepadTouchCodes.buttons + GamepadTouchCodes.dpad + listOf(GamepadTouchCodes.LEFT_ANALOG, GamepadTouchCodes.RIGHT_ANALOG) + GamepadTouchCodes.leftStick + GamepadTouchCodes.rightStick).distinct().filter { (GamepadTouchCodes.label(it) ?: "").contains(pickerQuery, ignoreCase = true) }.forEach { code ->
                             val selected = code in picked
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -157,6 +225,8 @@ fun ScreenKeyPicker(
                             }
                         }
                     }
+                    }
+                    if (pickerTab == DroidDeckPickerTab.KEYBOARD) {
                     LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         items(rows.size) { index ->
                             val row = rows[index]
@@ -164,14 +234,17 @@ fun ScreenKeyPicker(
                                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                row.forEach { key -> KeyCell(key, key.code in picked, Modifier.weight(key.weight)) { toggle(key.code) } }
+                                row.filter { pickerQuery.isBlank() || pcKeyLabel(context, it.code).contains(pickerQuery, ignoreCase = true) }
+                                    .forEach { key -> KeyCell(key, key.code in picked, Modifier.weight(key.weight)) { toggle(key.code) } }
                                 if (row.sumOf { it.weight.toDouble() } < unit) {
                                     Spacer(Modifier.weight(unit - row.fold(0f) { sum, key -> sum + key.weight }))
                                 }
                             }
                         }
                     }
+                    }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).focusGlide(CircleShape)) { Text("Cancel") }
                         Button(
                             onClick = { onAdd(picked) },
                             enabled = picked.isNotEmpty() || allowEmpty,

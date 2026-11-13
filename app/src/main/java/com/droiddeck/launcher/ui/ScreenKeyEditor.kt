@@ -78,6 +78,7 @@ import java.io.File
 import kotlin.math.roundToInt
 
 private val PANEL_WIDTH = 600.dp
+private enum class DroidDeckEditorTab { CONTROL, LAYOUT, APPEARANCE }
 private val CHIP_PADDING = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
 
 @Composable
@@ -125,6 +126,7 @@ fun ScreenKeyEditor(
     val p = LocalPalette.current
     val context = LocalContext.current
     var offset by remember(codes) { mutableStateOf(Offset.Zero) }
+    var editorTab by remember(codes) { mutableStateOf(DroidDeckEditorTab.CONTROL) }
     val density = LocalDensity.current
     val screen = LocalConfiguration.current
     val panelWidthPx = with(density) { PANEL_WIDTH.toPx() }
@@ -219,6 +221,33 @@ fun ScreenKeyEditor(
                         Icon(Icons.Default.Close, null, tint = p.onBackground)
                     }
                 }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(
+                        DroidDeckEditorTab.CONTROL to "Control",
+                        DroidDeckEditorTab.LAYOUT to "Layout",
+                        DroidDeckEditorTab.APPEARANCE to "Appearance",
+                    ).forEach { (tab, title) ->
+                        val selected = editorTab == tab
+                        Surface(
+                            Modifier.weight(1f).height(34.dp).clickable { editorTab = tab },
+                            shape = RoundedCornerShape(9.dp),
+                            color = if (selected) p.primary.copy(alpha = 0.17f) else p.line2.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, if (selected) p.primary else p.line2),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (selected) p.primary else p.onBackground.copy(alpha = 0.72f),
+                                )
+                            }
+                        }
+                    }
+                }
+                if (editorTab == DroidDeckEditorTab.CONTROL) {
                 Text("ACTIONS", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -278,6 +307,8 @@ fun ScreenKeyEditor(
                         Switch(checked = labels, onCheckedChange = onLabels, modifier = Modifier.height(30.dp).focusGlide())
                     }
                 }
+                }
+                if (editorTab == DroidDeckEditorTab.LAYOUT) {
                 Text("LAYOUT", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
                 Row(
                     Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -306,6 +337,8 @@ fun ScreenKeyEditor(
                     KeySlider("Width", "${if (width > 0) width else size * 2}", (if (width > 0) width else size * 2).toFloat(), 24f, 280f, Modifier.weight(1f)) { onWidth(it.roundToInt()) }
                     KeySlider("Height", "${if (height > 0) height else size}", (if (height > 0) height else size).toFloat(), 24f, 180f, Modifier.weight(1f)) { onHeight(it.roundToInt()) }
                 }
+                }
+                if (editorTab == DroidDeckEditorTab.APPEARANCE) {
                 Text("APPEARANCE", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = p.onBackground.copy(alpha = 0.65f))
                 val palette = listOf(0 to "Default", 0xFF1A9FFF.toInt() to "Blue", 0xFF3DDC84.toInt() to "Green", 0xFFFFA726.toInt() to "Amber", 0xFFFF5252.toInt() to "Red", 0xFFC77DFF.toInt() to "Violet", 0xFFFFFFFF.toInt() to "White")
                 listOf(
@@ -323,6 +356,7 @@ fun ScreenKeyEditor(
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     KeySlider("Border", "${borderWidth.toInt()} dp", borderWidth, 0f, 12f, Modifier.weight(1f), onBorderWidth)
                     KeySlider("Radius", if (cornerRadius < 0f) "Auto" else "${cornerRadius.toInt()} dp", if (cornerRadius < 0f) 16f else cornerRadius, 0f, 80f, Modifier.weight(1f)) { onCornerRadius(it) }
+                }
                 }
             }
         }

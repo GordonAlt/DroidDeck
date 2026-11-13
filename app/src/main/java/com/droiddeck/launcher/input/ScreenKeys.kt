@@ -618,7 +618,7 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
             val parent = entries.firstOrNull { it.radialParent && it.radialGroup == entry.radialGroup }
             if (parent != null && width > 0 && height > 0) {
                 val angle = Math.toRadians((entry.radialSlot * 45 - 90).toDouble())
-                val radius = maxOf(parent.halfW, parent.halfH) + maxOf(entry.halfW, entry.halfH) * 2.2f
+                val radius = maxOf(parent.halfW, parent.halfH) + maxOf(entry.halfW, entry.halfH) * 1.65f
                 entry.cx = (parent.cx + kotlin.math.cos(angle).toFloat() * radius).coerceIn(entry.halfW, width - entry.halfW)
                 entry.cy = (parent.cy + kotlin.math.sin(angle).toFloat() * radius).coerceIn(entry.halfH, height - entry.halfH)
                 entry.x = if (width > 0) entry.cx / width else entry.x
@@ -849,9 +849,23 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
     /** Whether a finger going down at ([x], [y]) lands on something here, as [onTouchEvent] decides it. */
     fun takesTouchAt(x: Float, y: Float): Boolean = editing || entryAt(x, y) != null
 
-    private fun entryAt(x: Float, y: Float): Entry? = entries.lastOrNull { entry ->
-        (editing || entry.radialSlot !in 0..7 || activeRadialGroup == entry.radialGroup) &&
-        x >= entry.cx - entry.halfW && x <= entry.cx + entry.halfW && y >= entry.cy - entry.halfH && y <= entry.cy + entry.halfH
+    // DROIDDECK_RADIAL_COMPACT_PATCH: retain full touch bounds and resolve
+    // overlapping radial children by nearest center.
+    private fun entryAt(x: Float, y: Float): Entry? {
+        val candidates = entries.filter { entry ->
+            (editing || entry.radialSlot !in 0..7 || activeRadialGroup == entry.radialGroup) &&
+                x >= entry.cx - entry.halfW && x <= entry.cx + entry.halfW &&
+                y >= entry.cy - entry.halfH && y <= entry.cy + entry.halfH
+        }
+        val topmost = candidates.lastOrNull() ?: return null
+        if (topmost.radialSlot !in 0..7) return topmost
+        return candidates.asSequence()
+            .filter { it.radialSlot in 0..7 && it.radialGroup == topmost.radialGroup }
+            .minByOrNull { child ->
+                val dx = child.cx - x
+                val dy = child.cy - y
+                dx * dx + dy * dy
+            } ?: topmost
     }
 
     private fun inCircle(center: PointF, x: Float, y: Float, radius: Float) = hypot(x - center.x, y - center.y) <= radius
@@ -862,7 +876,17 @@ class ScreenKeys(context: Context, private val sendKey: (Int, Boolean) -> Unit, 
 
     override fun onDraw(canvas: Canvas) {
         if (editing) drawGrid(canvas)
-        entries.filter { editing || it.radialSlot !in 0..7 || activeRadialGroup == it.radialGroup }.forEach { draw(canvas, it) }
+        entries.filter { editing || it.radialSlot !in 0..7 || activeRadialGroup == it.radialGroup }.forEach { entry ->
+            if (entry.radialSlot in 0..7) {
+                // Render child artwork smaller without shrinking touch rectangles.
+                canvas.save()
+                canvas.scale(0.82f, 0.82f, entry.cx, entry.cy)
+                draw(canvas, entry)
+                canvas.restore()
+            } else {
+                draw(canvas, entry)
+            }
+        }
         if (editing) {
             drawGuides(canvas)
             drawToolbar(canvas)
